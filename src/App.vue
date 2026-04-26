@@ -1,283 +1,414 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { supabase } from './supabase'
-// 1. 引入改名后的组件
 import UserAuth from './components/UserAuth.vue'
 import MilkChart from './components/MilkChart.vue'
 
-// 响应式状态
+// 状态管理
 const session = ref(null)
-const amountList = ref(false) // 初始设为 false 用于显示加载状态
-const newAmount = ref('')
-const newNotes = ref('')
+const amountList = ref([])
 const loading = ref(false)
 
-// 获取历史记录 (Supabase 会根据 RLS 自动过滤当前用户的数据)
+// 表单数据
+const newAmount = ref('')
+const newNotes = ref('')
+const logTime = ref(getCurrentDateTime())
+const editingId = ref(null) // 👈 新增：记录当前正在编辑的 ID
+
+function getCurrentDateTime() {
+  const now = new Date()
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+  return now.toISOString().slice(0, 16)
+}
+
+// 数据分组逻辑 (按9:00偏移)
+const groupedLogs = computed(() => {
+  if (!amountList.value.length) return []
+  const groups = {}
+  amountList.value.forEach((log) => {
+    const date = new Date(log.created_at)
+    const offsetDate = new Date(date)
+    offsetDate.setHours(offsetDate.getHours() - 9)
+    const dateKey = offsetDate.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
+    if (!groups[dateKey]) groups[dateKey] = []
+    groups[dateKey].push(log)
+  })
+  return Object.keys(groups).map((date) => ({
+    date,
+    logs: groups[date],
+    total: groups[date].reduce((sum, item) => sum + item.amount_ml, 0),
+  }))
+})
+
 async function fetchLogs() {
   const { data, error } = await supabase
     .from('milk_logs')
     .select('*')
     .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('获取数据失败:', error)
-  } else {
-    amountList.value = data
-  }
+  if (!error) amountList.value = data
 }
 
-// 添加新记录
-async function addLog() {
-  if (!newAmount.value || isNaN(newAmount.value)) {
-    alert('请输入有效的奶粉毫升数！')
-    return
-  }
+// 👈 选中某条记录进入编辑模式
+function selectForEdit(log) {
+  editingId.value = log.id // 注意：这是为了教学演示，实际应为 editingId.value
+  editingId.value = log.id
+  newAmount.value = log.amount_ml
+  newNotes.value = log.notes || ''
 
-  loading.value = true
-  // 注意：user_id 会由 Supabase 数据库通过 auth.uid() 自动填充
-  const { error } = await supabase
-    .from('milk_logs')
-    .insert([{ amount_ml: parseInt(newAmount.value), notes: newNotes.value }])
+  // 转换存储的时间为本地输入框格式
+  const date = new Date(log.created_at)
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  logTime.value = date.toISOString().slice(0, 16)
 
-  if (error) {
-    alert('保存失败: ' + error.message)
-  } else {
-    newAmount.value = ''
-    newNotes.value = ''
-    fetchLogs() // 刷新列表
-  }
-  loading.value = false
+  // 自动滚动到顶部输入框
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-// 退出登录
-async function handleLogout() {
-  if (confirm('确定要退出登录吗？')) {
-    await supabase.auth.signOut()
-  }
+// 👈 取消编辑
+function cancelEdit() {
+  editingId.value = null
+  newAmount.value = ''
+  newNotes.value = ''
+  logTime.value = getCurrentDateTime()
 }
 
-// 格式化时间显示
-function formatTime(isoString) {
-  const date = new Date(isoString)
-  return date.toLocaleString('zh-CN', {
+// 👈 保存数据 (新增或更新)
+// 保存数据 (新增或更新)
+async function saveLog() {
+  if (!newAmount.value) return alert('请输入奶量')
+
+  // 👉 新增的确认逻辑开始
+  const actionName = editingId.value ? '修改' : '新增'
+  const timeString = new Date(logTime.value).toLocaleString('zh-CN', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   })
+
+  // 弹出确认框，展示即将保存的详细信息
+  const isConfirmed = window.confirm(
+    `请确认${actionName}信息：\n\n` +
+      `时间：${timeString}\n` +
+      `奶量：${newAmount.value} ml\n` +
+      `备注：${newNotes.value || '无'}\n\n` +
+      `确定要保存吗？`,
+  )
+
+  // 如果用户点击了“取消”，则直接中断，不向服务器发送请求
+  if (!isConfirmed) {
+    return
+  }
+  // 👉 确认逻辑结束
+
+  loading.value = true
+
+  const payload = {
+    amount_ml: parseInt(newAmount.value),
+    notes: newNotes.value,
+    created_at: new Date(logTime.value).toISOString(),
+  }
+
+  let error
+  if (editingId.value) {
+    // 编辑模式
+    const { error: err } = await supabase
+      .from('milk_logs')
+      .update(payload)
+      .eq('id', editingId.value)
+    error = err
+  } else {
+    // 新增模式
+    const { error: err } = await supabase.from('milk_logs').insert([payload])
+    error = err
+  }
+
+  if (!error) {
+    cancelEdit()
+    fetchLogs()
+  } else {
+    alert('操作失败: ' + error.message)
+  }
+  loading.value = false
 }
 
-// 初始化：检查登录状态并监听变化
+// 👈 删除记录
+async function deleteLog(id) {
+  if (confirm('确定要删除这条记录吗？')) {
+    const { error } = await supabase.from('milk_logs').delete().eq('id', id)
+    if (!error) fetchLogs()
+  }
+}
+
+const handleLogout = async () => {
+  await supabase.auth.signOut()
+}
+
 onMounted(() => {
-  // 获取当前会话
   supabase.auth.getSession().then(({ data }) => {
     session.value = data.session
     if (session.value) fetchLogs()
   })
-
-  // 监听登录/登出事件
   supabase.auth.onAuthStateChange((_event, _session) => {
     session.value = _session
-    if (_session) {
-      fetchLogs()
-    } else {
-      amountList.value = [] // 登出后清空列表
-    }
+    if (_session) fetchLogs()
   })
 })
 </script>
 
 <template>
   <div class="app-wrapper">
-    <div v-if="!session" class="auth-screen">
-      <UserAuth />
-    </div>
+    <div v-if="!session" class="auth-screen"><UserAuth /></div>
 
     <main v-else class="container">
       <header class="header">
-        <h1>🍼 xixi 喝奶记录</h1>
+        <h1>🍼 xixi 记录本</h1>
         <button @click="handleLogout" class="btn-logout">退出</button>
       </header>
 
-      <section class="chart-card">
-        <h3>近 7 日趋势 (9:00起计)</h3>
-        <MilkChart v-if="amountList && amountList.length > 0" :logs="amountList" />
-        <div v-else-if="amountList === false" class="empty-chart">数据加载中...</div>
-        <div v-else class="empty-chart">暂无统计数据，快去记录吧！</div>
+      <section class="card chart-section">
+        <MilkChart v-if="amountList.length" :logs="amountList" />
       </section>
 
-      <section class="input-card">
-        <div class="input-group">
-          <input type="number" v-model="newAmount" placeholder="奶量 (ml)" inputmode="numeric" />
-          <input type="text" v-model="newNotes" placeholder="备注 (可选，如：睡前)" />
+      <section class="card input-section" :class="{ 'editing-mode': editingId }">
+        <div class="form-header">
+          <h3>{{ editingId ? '📝 修改记录' : '➕ 新增记录' }}</h3>
+          <button v-if="editingId" @click="cancelEdit" class="btn-text">取消</button>
         </div>
-        <button @click="addLog" :disabled="loading" class="btn-submit">
-          {{ loading ? '记录中...' : '确认提交' }}
+
+        <div class="form-row">
+          <div class="input-item">
+            <label>时间</label>
+            <input type="datetime-local" v-model="logTime" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="input-item">
+            <label>奶量 (ml)</label>
+            <input type="number" v-model="newAmount" placeholder="0" inputmode="numeric" />
+          </div>
+          <div class="input-item">
+            <label>备注</label>
+            <input type="text" v-model="newNotes" placeholder="可选" />
+          </div>
+        </div>
+        <button @click="saveLog" :disabled="loading" class="btn-primary">
+          {{ loading ? '处理中...' : editingId ? '保存修改' : '确认提交' }}
         </button>
       </section>
 
-      <section class="list-section">
-        <h3>最近记录</h3>
-        <div v-if="amountList === false" class="status-text">加载中...</div>
-        <ul v-else-if="amountList.length > 0">
-          <li v-for="log in amountList" :key="log.id" class="log-item">
-            <div class="log-main">
-              <span class="amount">{{ log.amount_ml }}<small>ml</small></span>
-              <span class="time">{{ formatTime(log.created_at) }}</span>
+      <section class="history-section">
+        <div v-for="group in groupedLogs" :key="group.date" class="date-group">
+          <div class="group-header">
+            <span class="group-date">{{ group.date }}</span>
+            <span class="group-total">共 {{ group.total }}ml</span>
+          </div>
+          <div class="log-grid">
+            <div
+              v-for="log in group.logs"
+              :key="log.id"
+              class="log-cell"
+              @click="selectForEdit(log)"
+            >
+              <div class="log-cell-top">
+                <span class="log-time">{{
+                  new Date(log.created_at).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                }}</span>
+                <button @click.stop="deleteLog(log.id)" class="btn-del">×</button>
+              </div>
+              <span class="log-amount">{{ log.amount_ml }}<small>ml</small></span>
+              <div v-if="log.notes" class="log-note">{{ log.notes }}</div>
             </div>
-            <p class="notes" v-if="log.notes">{{ log.notes }}</p>
-          </li>
-        </ul>
-        <div v-else class="status-text">今天还没有记录哦~</div>
+          </div>
+        </div>
       </section>
     </main>
   </div>
 </template>
 
 <style scoped>
+/* 之前的样式保持，新增/修改部分如下： */
 .app-wrapper {
   min-height: 100vh;
-  background-color: #f5f7f9;
-  color: #2c3e50;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f0f2f5;
+  padding-bottom: 40px;
 }
-
 .container {
   max-width: 500px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 15px;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
 }
-
 .header h1 {
-  font-size: 1.5rem;
-  margin: 0;
+  font-size: 1.4rem;
   color: #42b883;
+  margin: 0;
 }
 
-.btn-logout {
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* 编辑模式下的输入框高亮 */
+.editing-mode {
+  border: 2px solid #42b883;
+}
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.form-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #333;
+}
+.btn-text {
   background: none;
-  border: 1px solid #ff4d4d;
-  color: #ff4d4d;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 0.8rem;
+  border: none;
+  color: #999;
   cursor: pointer;
 }
 
-/* 输入卡片样式 */
-.input-card {
-  background: white;
-  padding: 15px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  margin-bottom: 25px;
+.form-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
 }
-
-.input-group {
+.input-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 12px;
 }
-
+.input-item label {
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 5px;
+}
 input {
-  padding: 12px;
-  border: 1px solid #ddd;
+  padding: 10px;
+  border: 1px solid #eee;
   border-radius: 8px;
   font-size: 1rem;
-  outline: none;
+  background: #fafafa;
 }
-
-input:focus {
-  border-color: #42b883;
-}
-
-.btn-submit {
+.btn-primary {
   width: 100%;
   padding: 12px;
   background: #42b883;
   color: white;
   border: none;
   border-radius: 8px;
-  font-size: 1rem;
   font-weight: bold;
   cursor: pointer;
 }
 
-.btn-submit:disabled {
-  background: #a0d8c0;
-}
-
-/* 列表样式 */
-.log-item {
-  background: white;
-  margin-bottom: 10px;
-  padding: 12px 15px;
-  border-radius: 8px;
-  list-style: none;
-}
-
-.log-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.amount {
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: #2c3e50;
-}
-.amount small {
-  font-size: 0.8rem;
-  margin-left: 2px;
-  color: #7f8c8d;
-}
-.time {
-  font-size: 0.85rem;
-  color: #95a5a6;
-}
-.notes {
-  margin: 8px 0 0 0;
-  font-size: 0.9rem;
-  color: #7f8c8d;
-  border-top: 1px dashed #eee;
-  padding-top: 5px;
-}
-
-.status-text {
-  text-align: center;
-  color: #95a5a6;
-  margin-top: 40px;
-}
-
-.chart-card {
-  background: white;
-  padding: 15px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+.date-group {
   margin-bottom: 20px;
 }
-
-.chart-card h3 {
-  margin: 0 0 10px 0;
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 5px 8px;
+  border-bottom: 2px solid #42b883;
+  margin-bottom: 10px;
+}
+.group-date {
+  font-weight: bold;
+  color: #333;
+}
+.group-total {
+  color: #42b883;
   font-size: 0.9rem;
-  color: #7f8c8d;
+  font-weight: bold;
 }
 
-.empty-chart {
-  height: 100px;
+.log-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+}
+.log-cell {
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-left: 3px solid #a0d8c0;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.1s;
+}
+.log-cell:active {
+  transform: scale(0.95);
+} /* 点击反馈 */
+
+.log-cell-top {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.log-time {
+  font-size: 0.75rem;
+  color: #999;
+}
+.btn-del {
+  border: none;
+  background: #f0f0f0;
+  color: #ccc;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #bdc3c7;
-  font-size: 0.8rem;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-del:hover {
+  background: #ff4d4d;
+  color: white;
+}
+
+.log-amount {
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin: 3px 0;
+}
+.log-amount small {
+  font-size: 0.7rem;
+  color: #888;
+  margin-left: 2px;
+}
+.log-note {
+  font-size: 0.7rem;
+  color: #aaa;
+  text-align: center;
+}
+
+.btn-logout {
+  background: none;
+  border: 1px solid #ccc;
+  color: #999;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
 }
 </style>
