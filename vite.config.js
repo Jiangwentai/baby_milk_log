@@ -11,7 +11,7 @@ export default defineConfig({
     // 👉 2. 配置 PWA 插件
     VitePWA({
       registerType: 'autoUpdate', // 发现新版本时自动更新后台缓存
-      includeAssets: ['/public/pwa-512x512.png'], // 其他静态资源
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'], // 其他静态资源
       manifest: {
         name: 'xixi 记录本',
         short_name: 'xixi记录本',
@@ -21,10 +21,9 @@ export default defineConfig({
         display: 'standalone', // 关键！这会让它看起来像个独立 App，隐藏浏览器 UI
         icons: [
           {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
             type: 'image/png',
-            purpose: 'any maskable', // 适配安卓的自适应图标形状
           },
         ],
       },
