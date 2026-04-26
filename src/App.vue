@@ -25,21 +25,27 @@ function getCurrentDateTime() {
 const groupedLogs = computed(() => {
   if (!amountList.value.length) return []
   const groups = {}
+
   amountList.value.forEach((log) => {
     const date = new Date(log.created_at)
-    const offsetDate = new Date(date)
-    offsetDate.setHours(offsetDate.getHours() - 9)
-    const dateKey = offsetDate.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
+    // 关键：统一减去 9 小时后再取日期
+    const offsetDate = new Date(date.getTime() - 9 * 60 * 60 * 1000)
+    // 强制使用 YYYY-MM-DD 格式作为 Key，避免本地化字符串干扰
+    const dateKey = offsetDate.toISOString().split('T')[0]
+
     if (!groups[dateKey]) groups[dateKey] = []
     groups[dateKey].push(log)
   })
-  return Object.keys(groups).map((date) => ({
-    date,
-    logs: groups[date],
-    total: groups[date].reduce((sum, item) => sum + item.amount_ml, 0),
-  }))
-})
 
+  return Object.keys(groups)
+    .sort()
+    .reverse()
+    .map((date) => ({
+      date: date, // 可以在模板里再格式化为中文
+      logs: groups[date],
+      total: groups[date].reduce((sum, item) => sum + item.amount_ml, 0),
+    }))
+})
 async function fetchLogs() {
   const { data, error } = await supabase
     .from('milk_logs')
