@@ -162,7 +162,7 @@ onMounted(() => {
 
     <main v-else class="container">
       <header class="header">
-        <h1>🍼 xixi 记录本</h1>
+        <h1>🍼 xixi 记录本 version 0.8</h1>
         <button @click="handleLogout" class="btn-logout">退出</button>
       </header>
 
@@ -200,8 +200,8 @@ onMounted(() => {
       <section class="history-section">
         <div v-for="group in groupedLogs" :key="group.date" class="date-group">
           <div class="group-header">
-            <span class="group-date">{{ group.date }}</span>
-            <span class="group-total">共 {{ group.total }}ml</span>
+            <span class="group-date">{{ group.date }}共</span>
+            <span class="group-total"> {{ group.total }}ml</span>
           </div>
           <div class="log-grid">
             <div

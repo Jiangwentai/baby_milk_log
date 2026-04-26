@@ -11,7 +11,7 @@ export default defineConfig({
     // 👉 2. 配置 PWA 插件
     VitePWA({
       registerType: 'autoUpdate', // 发现新版本时自动更新后台缓存
-      includeAssets: ['pwa-512x512.png'], // 其他静态资源
+      includeAssets: ['/public/pwa-512x512.png'], // 其他静态资源
       manifest: {
         name: 'xixi 记录本',
         short_name: 'xixi记录本',
