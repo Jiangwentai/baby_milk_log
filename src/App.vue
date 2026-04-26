@@ -211,16 +211,21 @@ onMounted(() => {
               @click="selectForEdit(log)"
             >
               <div class="log-cell-top">
-                <span class="log-time">{{
-                  new Date(log.created_at).toLocaleTimeString('zh-CN', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                }}</span>
+                <span class="log-time"
+                  >⏰
+                  {{
+                    new Date(log.created_at).toLocaleTimeString('zh-CN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  }}</span
+                >
                 <button @click.stop="deleteLog(log.id)" class="btn-del">×</button>
               </div>
-              <span class="log-amount">{{ log.amount_ml }}<small>ml</small></span>
-              <div v-if="log.notes" class="log-note">{{ log.notes }}</div>
+
+              <div class="log-amount">{{ log.amount_ml }}<small>ml</small></div>
+
+              <div v-if="log.notes" class="log-note">💬 {{ log.notes }}</div>
             </div>
           </div>
         </div>
@@ -317,98 +322,98 @@ input {
   cursor: pointer;
 }
 
+/* 历史记录分组容器 */
 .date-group {
-  margin-bottom: 20px;
-}
-.group-header {
-  display: flex;
-  justify-content: space-between;
-  padding: 0 5px 8px;
-  border-bottom: 2px solid #42b883;
-  margin-bottom: 10px;
-}
-.group-date {
-  font-weight: bold;
-  color: #333;
-}
-.group-total {
-  color: #42b883;
-  font-size: 0.9rem;
-  font-weight: bold;
+  margin-bottom: 25px;
 }
 
+/* 强制单列布局 */
 .log-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column; /* 纵向排列，形成单列 */
+  gap: 12px;
 }
+
+/* 重新设计单列卡片：左右布局 */
 .log-cell {
   background: white;
-  padding: 10px;
-  border-radius: 8px;
+  padding: 15px;
+  border-radius: 12px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border-left: 3px solid #a0d8c0;
+  flex-direction: column; /* 内部依然纵向，但宽度撑满 */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  border-left: 4px solid #42b883; /* 绿色左边条 */
   cursor: pointer;
   position: relative;
-  transition: transform 0.1s;
+  transition: all 0.2s;
 }
-.log-cell:active {
-  transform: scale(0.95);
-} /* 点击反馈 */
 
+.log-cell:active {
+  transform: scale(0.98);
+  background-color: #f9f9f9;
+}
+
+/* 卡片顶部：时间、删除按钮 */
 .log-cell-top {
   width: 100%;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
+  margin-bottom: 5px;
 }
+
 .log-time {
-  font-size: 0.75rem;
-  color: #999;
+  font-size: 0.85rem;
+  color: #888;
+  font-weight: 500;
 }
+
+/* 奶量主体：居左显示 */
+.log-amount {
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: #2c3e50;
+  text-align: left; /* 改为左对齐 */
+  margin: 5px 0;
+}
+
+.group-total {
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: #2c3e50;
+  text-align: left; /* 改为左对齐 */
+  margin: 5px 0;
+}
+
+/* 备注部分：撑满宽度 */
+.log-note {
+  font-size: 0.9rem;
+  color: #7f8c8d;
+  background: #f8faf9;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-top: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.log-amount small {
+  font-size: 1.2rem;
+  color: #95a5a6;
+  margin-left: 6px;
+}
+
+/* 优化删除按钮，让它在单列中更易点 */
 .btn-del {
   border: none;
-  background: #f0f0f0;
-  color: #ccc;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
+  background: #fee;
+  color: #ff4d4d;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 16px;
   cursor: pointer;
-}
-.btn-del:hover {
-  background: #ff4d4d;
-  color: white;
-}
-
-.log-amount {
-  font-size: 1.1rem;
-  font-weight: bold;
-  margin: 3px 0;
-}
-.log-amount small {
-  font-size: 0.7rem;
-  color: #888;
-  margin-left: 2px;
-}
-.log-note {
-  font-size: 0.7rem;
-  color: #aaa;
-  text-align: center;
-}
-
-.btn-logout {
-  background: none;
-  border: 1px solid #ccc;
-  color: #999;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 0.7rem;
 }
 </style>
