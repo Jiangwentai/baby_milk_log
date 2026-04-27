@@ -80,7 +80,7 @@ const milkTargetStats = computed(() => {
   const todayTotal = todayGroup ? todayGroup.total : 0
   const pastGroups = groupedLogs.value.filter((g) => g.dateKey < todayKey)
   if (pastGroups.length === 0) return null
-  const recent7Groups = pastGroups.slice(0, 7)
+  const recent7Groups = pastGroups.slice(0, 5)
   const pastTotal = recent7Groups.reduce((sum, g) => sum + g.total, 0)
   const pastAverage = Math.round(pastTotal / recent7Groups.length)
   const diff = pastAverage - todayTotal
@@ -144,16 +144,16 @@ async function deleteLog(id) {
 // ==========================================
 const activityList = ref([])
 const actTime = ref(getCurrentDateTime())
-const actType = ref('💊 维生素')
+const actType = ref('💊 AD')
 const actNotes = ref('')
 const actEditingId = ref(null)
-const activityOptions = ['💊 维生素', '🏊 游泳', '💩 换尿布', '🛁 洗澡', '🌡️ 体温/生病', '📝 其他']
+const activityOptions = ['💊 AD', '🏊 游泳', '💩💩💩', '🛁 洗澡', '🌡️ 体温/生病', '📝 其他']
 
 const hasTakenVitaminToday = computed(() => {
   if (!activityList.value.length) return false
   const todayString = new Date().toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
   return activityList.value.some((log) => {
-    if (log.type !== '💊 维生素') return false
+    if (log.type !== '💊 AD') return false
     const logDate = new Date(log.created_at).toLocaleDateString('zh-CN', {
       month: 'numeric',
       day: 'numeric',
@@ -213,7 +213,7 @@ function selectForEditAct(log) {
 
 function cancelEditAct() {
   actEditingId.value = null
-  actType.value = '💊 维生素'
+  actType.value = '💊 AD'
   actNotes.value = ''
   actTime.value = getCurrentDateTime()
 }
@@ -284,7 +284,7 @@ onMounted(() => {
             <div class="main-status">
               <span class="status-icon">{{ hasTakenVitaminToday ? '✅' : '⚠️' }}</span>
               <span class="status-text">{{
-                hasTakenVitaminToday ? '今日已吃维生素' : '今日还没吃维生素哦'
+                hasTakenVitaminToday ? '今日已吃AD' : '今日还没吃AD哦'
               }}</span>
             </div>
             <div class="sub-status" v-if="milkTargetStats">
@@ -292,7 +292,7 @@ onMounted(() => {
               <span>{{
                 milkTargetStats.isAchieved
                   ? `今日奶量 ${milkTargetStats.todayTotal}ml，已达标！`
-                  : `距7日均线(${milkTargetStats.average}ml)还差 ${milkTargetStats.diff}ml`
+                  : `距5日平均(${milkTargetStats.average}ml)还差 ${milkTargetStats.diff}ml`
               }}</span>
             </div>
           </div>
