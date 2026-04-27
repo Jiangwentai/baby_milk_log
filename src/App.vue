@@ -560,6 +560,27 @@ select {
   width: 100%;
   box-sizing: border-box;
 }
+
+/* 针对苹果设备的 datetime-local 修复补丁 */
+input[type='datetime-local'] {
+  /* 强制它的最大宽度不能超过父元素 */
+  max-width: 100%;
+  box-sizing: border-box;
+
+  /* 苹果默认的内边距太大，左右边距缩小到 2px 给文字腾空间 */
+  padding: 10px 2px;
+
+  /* 稍微缩小一点点字号，防止撑爆 */
+  font-size: 0.9rem;
+
+  /* 清除苹果默认的 UI 渲染样式（比如内阴影） */
+  -webkit-appearance: none;
+  appearance: none;
+
+  /* 居中显示，看起来更协调 */
+  text-align: center;
+}
+
 .btn-primary {
   width: 100%;
   padding: 12px;
