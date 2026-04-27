@@ -6,8 +6,10 @@ import MilkChart from './components/MilkChart.vue'
 
 // ==== 全局状态 ====
 const session = ref(null)
-const activeTab = ref('milk') // 当前标签：'milk' 或 'other'
+const activeTab = ref('milk')
 const loading = ref(false)
+const expandedDates = ref([]) // 喝奶页面的展开记录
+const expandedActDates = ref([]) // 日常页面的展开记录
 
 function getCurrentDateTime() {
   const now = new Date()
@@ -15,6 +17,17 @@ function getCurrentDateTime() {
   return now.toISOString().slice(0, 16)
 }
 
+// 切换折叠状态 (通用逻辑)
+// 切换折叠状态 (修复版)
+function toggleFold(dateKey, targetList) {
+  // 因为从 template 传进来的已经是解包后的数组，所以不需要加 .value
+  const index = targetList.indexOf(dateKey)
+  if (index > -1) {
+    targetList.splice(index, 1)
+  } else {
+    targetList.push(dateKey)
+  }
+}
 // ==========================================
 // 🍼 模块一：喝奶记录相关的状态与方法
 // ==========================================
@@ -27,12 +40,18 @@ const editingId = ref(null)
 const groupedLogs = computed(() => {
   if (!amountList.value.length) return []
   const groups = {}
+
+  // 3天折叠阈值
+  const now = new Date()
+  const todayOffset = new Date(now.getTime() - 9 * 60 * 60 * 1000)
+  const threeDaysAgo = new Date(todayOffset)
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+  const thresholdKey = threeDaysAgo.toISOString().split('T')[0]
+
   amountList.value.forEach((log) => {
     const date = new Date(log.created_at)
-    // 统一减去 9 小时，归入前一天
     const offsetDate = new Date(date.getTime() - 9 * 60 * 60 * 1000)
     const dateKey = offsetDate.toISOString().split('T')[0]
-
     if (!groups[dateKey]) groups[dateKey] = []
     groups[dateKey].push(log)
   })
@@ -40,15 +59,32 @@ const groupedLogs = computed(() => {
   return Object.keys(groups)
     .sort()
     .reverse()
-    .map((date) => {
-      // 将 YYYY-MM-DD 转换为更友好的中文显示
-      const d = new Date(date)
+    .map((dateKey) => {
+      const d = new Date(dateKey)
       return {
-        date: `${d.getMonth() + 1}月${d.getDate()}日`,
-        logs: groups[date],
-        total: groups[date].reduce((sum, item) => sum + item.amount_ml, 0),
+        dateKey,
+        displayDate: `${d.getMonth() + 1}月${d.getDate()}日`,
+        logs: groups[dateKey],
+        total: groups[dateKey].reduce((sum, item) => sum + item.amount_ml, 0),
+        isOld: dateKey < thresholdKey,
       }
     })
+})
+
+const milkTargetStats = computed(() => {
+  if (!groupedLogs.value || groupedLogs.value.length === 0) return null
+  const now = new Date()
+  const todayOffset = new Date(now.getTime() - 9 * 60 * 60 * 1000)
+  const todayKey = todayOffset.toISOString().split('T')[0]
+  const todayGroup = groupedLogs.value.find((g) => g.dateKey === todayKey)
+  const todayTotal = todayGroup ? todayGroup.total : 0
+  const pastGroups = groupedLogs.value.filter((g) => g.dateKey < todayKey)
+  if (pastGroups.length === 0) return null
+  const recent7Groups = pastGroups.slice(0, 7)
+  const pastTotal = recent7Groups.reduce((sum, g) => sum + g.total, 0)
+  const pastAverage = Math.round(pastTotal / recent7Groups.length)
+  const diff = pastAverage - todayTotal
+  return { todayTotal, average: pastAverage, diff: diff > 0 ? diff : 0, isAchieved: diff <= 0 }
 })
 
 async function fetchLogs() {
@@ -78,32 +114,17 @@ function cancelEdit() {
 
 async function saveLog() {
   if (!newAmount.value) return alert('请输入奶量')
-
   const actionName = editingId.value ? '修改' : '新增'
-  const timeString = new Date(logTime.value).toLocaleString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-  if (
-    !window.confirm(
-      `请确认${actionName}信息：\n时间：${timeString}\n奶量：${newAmount.value} ml\n备注：${newNotes.value || '无'}\n\n确定要保存吗？`,
-    )
-  )
-    return
-
+  if (!window.confirm(`确认${actionName}奶粉记录？`)) return
   loading.value = true
   const payload = {
     amount_ml: parseInt(newAmount.value),
     notes: newNotes.value,
     created_at: new Date(logTime.value).toISOString(),
   }
-
   const { error } = editingId.value
     ? await supabase.from('milk_logs').update(payload).eq('id', editingId.value)
     : await supabase.from('milk_logs').insert([payload])
-
   if (!error) {
     cancelEdit()
     fetchLogs()
@@ -126,10 +147,8 @@ const actTime = ref(getCurrentDateTime())
 const actType = ref('💊 维生素')
 const actNotes = ref('')
 const actEditingId = ref(null)
-
 const activityOptions = ['💊 维生素', '🏊 游泳', '💩 换尿布', '🛁 洗澡', '🌡️ 体温/生病', '📝 其他']
 
-// 👉 维生素提醒状态计算
 const hasTakenVitaminToday = computed(() => {
   if (!activityList.value.length) return false
   const todayString = new Date().toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
@@ -146,9 +165,15 @@ const hasTakenVitaminToday = computed(() => {
 const groupedActivities = computed(() => {
   if (!activityList.value.length) return []
   const groups = {}
+
+  // 5 天折叠阈值
+  const now = new Date()
+  const fiveDaysAgo = new Date(now)
+  fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5)
+  const thresholdKey = fiveDaysAgo.toISOString().split('T')[0]
+
   activityList.value.forEach((log) => {
     const date = new Date(log.created_at)
-    // 日常活动按自然日统计
     const dateKey = date.toISOString().split('T')[0]
     if (!groups[dateKey]) groups[dateKey] = []
     groups[dateKey].push(log)
@@ -157,11 +182,13 @@ const groupedActivities = computed(() => {
   return Object.keys(groups)
     .sort()
     .reverse()
-    .map((date) => {
-      const d = new Date(date)
+    .map((dateKey) => {
+      const d = new Date(dateKey)
       return {
-        date: `${d.getMonth() + 1}月${d.getDate()}日`,
-        logs: groups[date],
+        dateKey,
+        displayDate: `${d.getMonth() + 1}月${d.getDate()}日`,
+        logs: groups[dateKey],
+        isOld: dateKey < thresholdKey,
       }
     })
 })
@@ -192,17 +219,16 @@ function cancelEditAct() {
 }
 
 async function saveActivity() {
+  if (!window.confirm(`确认保存日常记录吗？`)) return
   loading.value = true
   const payload = {
     type: actType.value,
     notes: actNotes.value,
     created_at: new Date(actTime.value).toISOString(),
   }
-
   const { error } = actEditingId.value
     ? await supabase.from('activity_logs').update(payload).eq('id', actEditingId.value)
     : await supabase.from('activity_logs').insert([payload])
-
   if (!error) {
     cancelEditAct()
     fetchActivities()
@@ -253,11 +279,23 @@ onMounted(() => {
       </header>
 
       <div v-show="activeTab === 'milk'" class="tab-content">
-        <div class="vitamin-status" :class="hasTakenVitaminToday ? 'status-ok' : 'status-warn'">
-          <span class="status-icon">{{ hasTakenVitaminToday ? '✅' : '⚠️' }}</span>
-          <span class="status-text">
-            {{ hasTakenVitaminToday ? '今日已补充维生素' : '今日尚未补充维生素' }}
-          </span>
+        <div class="status-board" :class="hasTakenVitaminToday ? 'status-ok' : 'status-warn'">
+          <div class="status-left">
+            <div class="main-status">
+              <span class="status-icon">{{ hasTakenVitaminToday ? '✅' : '⚠️' }}</span>
+              <span class="status-text">{{
+                hasTakenVitaminToday ? '今日已吃维生素' : '今日还没吃维生素哦'
+              }}</span>
+            </div>
+            <div class="sub-status" v-if="milkTargetStats">
+              <span class="sub-icon">{{ milkTargetStats.isAchieved ? '🎉' : '🍼' }}</span>
+              <span>{{
+                milkTargetStats.isAchieved
+                  ? `今日奶量 ${milkTargetStats.todayTotal}ml，已达标！`
+                  : `距7日均线(${milkTargetStats.average}ml)还差 ${milkTargetStats.diff}ml`
+              }}</span>
+            </div>
+          </div>
         </div>
 
         <section class="card chart-section">
@@ -266,23 +304,20 @@ onMounted(() => {
 
         <section class="card input-section" :class="{ 'editing-mode': editingId }">
           <div class="form-header">
-            <h3>{{ editingId ? '📝 修改奶粉记录' : '➕ 新增奶粉记录' }}</h3>
+            <h3>{{ editingId ? '📝 修改记录' : '➕ 新增记录' }}</h3>
             <button v-if="editingId" @click="cancelEdit" class="btn-text">取消</button>
           </div>
           <div class="form-row">
             <div class="input-item">
-              <label>时间</label>
-              <input type="datetime-local" v-model="logTime" />
+              <label>时间</label><input type="datetime-local" v-model="logTime" />
             </div>
           </div>
           <div class="form-row">
             <div class="input-item">
-              <label>奶量 (ml)</label>
-              <input type="number" v-model="newAmount" placeholder="0" inputmode="numeric" />
+              <label>奶量(ml)</label><input type="number" v-model="newAmount" inputmode="numeric" />
             </div>
             <div class="input-item">
-              <label>备注</label>
-              <input type="text" v-model="newNotes" placeholder="可选" />
+              <label>备注</label><input type="text" v-model="newNotes" placeholder="可选" />
             </div>
           </div>
           <button @click="saveLog" :disabled="loading" class="btn-primary">
@@ -291,12 +326,22 @@ onMounted(() => {
         </section>
 
         <section class="history-section">
-          <div v-for="group in groupedLogs" :key="group.date" class="date-group">
-            <div class="group-header">
-              <span class="group-date">{{ group.date }}</span>
+          <div v-for="group in groupedLogs" :key="group.dateKey" class="date-group">
+            <div
+              class="group-header"
+              @click="group.isOld && toggleFold(group.dateKey, expandedDates)"
+              :class="{ clickable: group.isOld }"
+            >
+              <span class="group-date"
+                >{{ group.displayDate }}
+                <small v-if="group.isOld" class="fold-tag">{{
+                  expandedDates.includes(group.dateKey) ? '🔼 收起' : '🔽 历史'
+                }}</small></span
+              >
               <span class="group-total">共 {{ group.total }}ml</span>
             </div>
-            <div class="log-grid">
+
+            <div class="log-grid" v-if="!group.isOld || expandedDates.includes(group.dateKey)">
               <div
                 v-for="log in group.logs"
                 :key="log.id"
@@ -312,8 +357,7 @@ onMounted(() => {
                         minute: '2-digit',
                       })
                     }}</span
-                  >
-                  <button @click.stop="deleteLog(log.id)" class="btn-del">×</button>
+                  ><button @click.stop="deleteLog(log.id)" class="btn-del">×</button>
                 </div>
                 <div class="log-amount">{{ log.amount_ml }}<small>ml</small></div>
                 <div v-if="log.notes" class="log-note">💬 {{ log.notes }}</div>
@@ -326,27 +370,25 @@ onMounted(() => {
       <div v-show="activeTab === 'other'" class="tab-content">
         <section class="card input-section" :class="{ 'editing-mode': actEditingId }">
           <div class="form-header">
-            <h3>{{ actEditingId ? '📝 修改日常记录' : '➕ 新增日常记录' }}</h3>
+            <h3>{{ actEditingId ? '📝 修改记录' : '➕ 新增记录' }}</h3>
             <button v-if="actEditingId" @click="cancelEditAct" class="btn-text">取消</button>
           </div>
           <div class="form-row">
             <div class="input-item">
-              <label>时间</label>
-              <input type="datetime-local" v-model="actTime" />
+              <label>时间</label><input type="datetime-local" v-model="actTime" />
             </div>
           </div>
           <div class="form-row">
             <div class="input-item">
-              <label>活动项目</label>
-              <select v-model="actType" class="act-select">
+              <label>活动</label
+              ><select v-model="actType" class="act-select">
                 <option v-for="opt in activityOptions" :key="opt" :value="opt">{{ opt }}</option>
               </select>
             </div>
           </div>
           <div class="form-row">
             <div class="input-item">
-              <label>详细备注 (建议填写)</label>
-              <input type="text" v-model="actNotes" placeholder="例如：游了15分钟" />
+              <label>备注</label><input type="text" v-model="actNotes" placeholder="细节描述" />
             </div>
           </div>
           <button
@@ -360,12 +402,21 @@ onMounted(() => {
         </section>
 
         <section class="history-section">
-          <div v-for="group in groupedActivities" :key="group.date" class="date-group">
-            <div class="group-header">
-              <span class="group-date">{{ group.date }}</span>
-              <span class="group-total">{{ group.logs.length }} 项记录</span>
+          <div v-for="group in groupedActivities" :key="group.dateKey" class="date-group">
+            <div
+              class="group-header"
+              @click="group.isOld && toggleFold(group.dateKey, expandedActDates)"
+              :class="{ clickable: group.isOld }"
+            >
+              <span class="group-date">
+                {{ group.displayDate }}
+                <small v-if="group.isOld" class="fold-tag tag-blue">
+                  {{ expandedActDates.includes(group.dateKey) ? '🔼 收起' : '🔽 历史' }}
+                </small>
+              </span>
+              <span class="group-total">{{ group.logs.length }}项记录</span>
             </div>
-            <div class="log-grid">
+            <div class="log-grid" v-if="!group.isOld || expandedActDates.includes(group.dateKey)">
               <div
                 v-for="log in group.logs"
                 :key="log.id"
@@ -381,8 +432,7 @@ onMounted(() => {
                         minute: '2-digit',
                       })
                     }}</span
-                  >
-                  <button @click.stop="deleteActivity(log.id)" class="btn-del">×</button>
+                  ><button @click.stop="deleteActivity(log.id)" class="btn-del">×</button>
                 </div>
                 <div class="log-amount act-title">{{ log.type }}</div>
                 <div v-if="log.notes" class="log-note">💬 {{ log.notes }}</div>
@@ -395,23 +445,20 @@ onMounted(() => {
 
     <nav class="bottom-nav" v-if="session">
       <div class="nav-item" :class="{ active: activeTab === 'milk' }" @click="activeTab = 'milk'">
-        <span class="nav-icon">🍼</span>
-        <span class="nav-text">喝奶</span>
+        <span class="nav-icon">🍼</span><span class="nav-text">喝奶</span>
       </div>
       <div class="nav-item" :class="{ active: activeTab === 'other' }" @click="activeTab = 'other'">
-        <span class="nav-icon">🌟</span>
-        <span class="nav-text">日常</span>
+        <span class="nav-icon">🌟</span><span class="nav-text">日常</span>
       </div>
     </nav>
   </div>
 </template>
 
 <style scoped>
-/* 全局与布局 */
 .app-wrapper {
   min-height: 100vh;
   background: #f0f2f5;
-  padding-bottom: 80px;
+  padding-bottom: 90px;
 }
 .container {
   max-width: 500px;
@@ -425,80 +472,74 @@ onMounted(() => {
   margin-bottom: 15px;
 }
 .header h1 {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   color: #2c3e50;
-  margin: 0;
 }
 .card {
   background: white;
   border-radius: 12px;
   padding: 15px;
   margin-bottom: 15px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-}
-.btn-logout {
-  background: none;
-  border: 1px solid #ccc;
-  color: #999;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 0.7rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-/* 维生素状态条 */
-.vitamin-status {
+.status-board {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 12px 15px;
   border-radius: 12px;
   margin-bottom: 15px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 .status-ok {
-  background-color: #f0fdf4;
+  background: #f0fdf4;
   border: 1px solid #bbf7d0;
   color: #166534;
 }
 .status-warn {
-  background-color: #fffbeb;
+  background: #fffbeb;
   border: 1px solid #fef08a;
   color: #b45309;
 }
-.status-icon {
-  font-size: 1.2rem;
-  margin-right: 10px;
+.status-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.status-text {
-  flex: 1;
+.main-status {
+  display: flex;
+  align-items: center;
   font-size: 0.9rem;
   font-weight: bold;
 }
+.sub-status {
+  display: flex;
+  align-items: center;
+  font-size: 0.7rem;
+  opacity: 0.8;
+  margin-left: 2px;
+}
+.status-icon {
+  margin-right: 8px;
+}
 
-/* 表单输入区域 */
 .editing-mode {
   border: 2px solid #42b883;
 }
 .form-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
   margin-bottom: 10px;
 }
 .form-header h3 {
+  font-size: 0.95rem;
   margin: 0;
-  font-size: 1rem;
-  color: #333;
-}
-.btn-text {
-  background: none;
-  border: none;
-  color: #999;
-  cursor: pointer;
 }
 .form-row {
   display: flex;
   gap: 10px;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
 }
 .input-item {
   flex: 1;
@@ -506,9 +547,9 @@ onMounted(() => {
   flex-direction: column;
 }
 .input-item label {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #888;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 input,
 select {
@@ -516,11 +557,8 @@ select {
   border: 1px solid #eee;
   border-radius: 8px;
   font-size: 1rem;
-  background: #fafafa;
-}
-.act-select {
-  appearance: none;
-  background-color: white;
+  width: 100%;
+  box-sizing: border-box;
 }
 .btn-primary {
   width: 100%;
@@ -530,103 +568,97 @@ select {
   border: none;
   border-radius: 8px;
   font-weight: bold;
-  cursor: pointer;
 }
 
-/* 历史记录 (单列布局) */
-.date-group {
-  margin-bottom: 25px;
-}
 .group-header {
   display: flex;
   justify-content: space-between;
-  padding: 0 5px 8px;
-  border-bottom: 2px solid #ccc;
+  padding: 10px 5px;
+  border-bottom: 2px solid #eee;
   margin-bottom: 10px;
+}
+.clickable {
+  cursor: pointer;
 }
 .group-date {
   font-weight: bold;
-  color: #333;
+  display: flex;
+  align-items: center;
+}
+.fold-tag {
+  margin-left: 8px;
+  font-size: 0.65rem;
+  color: #42b883;
+  background: #e8f5ee;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: normal;
+}
+.tag-blue {
+  color: #3498db;
+  background: #ebf5fb;
 }
 .group-total {
   color: #888;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
+
 .log-grid {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-
-/* 卡片样式 */
 .log-cell {
   background: white;
   padding: 15px;
   border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
   border-left: 4px solid #42b883;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
   cursor: pointer;
-  position: relative;
-  transition: all 0.2s;
 }
 .act-cell {
   border-left-color: #3498db;
 }
 .log-cell-top {
-  width: 100%;
   display: flex;
   justify-content: space-between;
-  align-items: center;
   margin-bottom: 5px;
 }
 .log-time {
-  font-size: 0.85rem;
-  color: #888;
-  font-weight: 500;
+  color: #999;
+  font-size: 0.8rem;
 }
 .btn-del {
   border: none;
   background: #fee;
-  color: #ff4d4d;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  cursor: pointer;
+  color: #f55;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
 }
 .log-amount {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   font-weight: bold;
-  color: #2c3e50;
-  text-align: left;
-  margin: 5px 0;
+  color: #333;
 }
 .act-title {
   font-size: 1.1rem;
   color: #3498db;
 }
 .log-amount small {
-  font-size: 0.9rem;
-  color: #95a5a6;
-  margin-left: 4px;
+  font-size: 0.8rem;
+  color: #999;
+  margin-left: 3px;
 }
 .log-note {
-  font-size: 0.9rem;
-  color: #7f8c8d;
-  background: #f8faf9;
-  padding: 6px 10px;
-  border-radius: 6px;
   margin-top: 8px;
-  width: 100%;
-  box-sizing: border-box;
+  padding: 6px;
+  background: #f9f9f9;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #666;
 }
 
-/* 底部导航栏 */
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -634,37 +666,27 @@ select {
   width: 100%;
   background: white;
   display: flex;
-  justify-content: space-around;
   padding: 10px 0;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
-  z-index: 100;
   padding-bottom: env(safe-area-inset-bottom, 10px);
 }
 .nav-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #bdc3c7;
+  color: #ccc;
   cursor: pointer;
-  transition: color 0.3s;
-}
-.nav-icon {
-  font-size: 1.4rem;
-  margin-bottom: 3px;
-  filter: grayscale(100%);
-  opacity: 0.5;
-  transition: all 0.3s;
-}
-.nav-text {
-  font-size: 0.75rem;
-  font-weight: 600;
 }
 .nav-item.active {
   color: #2c3e50;
 }
-.nav-item.active .nav-icon {
-  filter: grayscale(0%);
-  opacity: 1;
-  transform: scale(1.1);
+.nav-icon {
+  font-size: 1.3rem;
+  margin-bottom: 2px;
+}
+.nav-text {
+  font-size: 0.7rem;
+  font-weight: bold;
 }
 </style>
