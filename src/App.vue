@@ -274,7 +274,11 @@ onMounted(() => {
 
     <main v-else class="container">
       <header class="header">
-        <h1>{{ activeTab === 'milk' ? '🍼 喝奶记录' : '🌟 日常记录' }}</h1>
+        <div class="title-group">
+          <h1>小晞晞健康成长 🍼👼🌿v1.0</h1>
+          <h2>{{ activeTab === 'milk' ? '🍼 喝奶记录' : '🌟 日常记录' }}</h2>
+        </div>
+
         <button @click="handleLogout" class="btn-logout">退出</button>
       </header>
 
@@ -465,16 +469,37 @@ onMounted(() => {
   margin: 0 auto;
   padding: 15px;
 }
+/* 头部整体布局保持横向两端对齐 */
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: center; /* 也可以改成 flex-start 让退出按钮靠上 */
   margin-bottom: 15px;
 }
-.header h1 {
-  font-size: 1.3rem;
-  color: #2c3e50;
+
+/* 👉 新增：标题组变成纵向排列 */
+.title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px; /* 两个标题之间的上下间距 */
 }
+
+/* 主标题样式 */
+.title-group h1 {
+  text-align: center;
+  font-size: 1.25rem;
+  color: #2c3e50;
+  margin: 0;
+}
+
+/* 副标题样式 */
+.title-group h2 {
+  font-size: 0.85rem;
+  color: #7f8c8d;
+  margin: 0;
+  font-weight: normal;
+}
+
 .card {
   background: white;
   border-radius: 12px;
