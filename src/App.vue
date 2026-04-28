@@ -564,8 +564,6 @@ select {
 /* 针对苹果设备的 datetime-local 修复补丁 */
 input[type='datetime-local'] {
   /* 强制它的最大宽度不能超过父元素 */
-  max-width: 100%;
-  box-sizing: border-box;
 
   /* 苹果默认的内边距太大，左右边距缩小到 2px 给文字腾空间 */
   padding: 10px 2px;
