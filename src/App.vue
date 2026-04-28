@@ -46,12 +46,12 @@ const groupedLogs = computed(() => {
   const todayOffset = new Date(now.getTime() - 9 * 60 * 60 * 1000)
   const threeDaysAgo = new Date(todayOffset)
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-  const thresholdKey = threeDaysAgo.toISOString().split('T')[0]
+  const thresholdKey = threeDaysAgo.toLocaleDateString('zh-CN')
 
   amountList.value.forEach((log) => {
     const date = new Date(log.created_at)
     const offsetDate = new Date(date.getTime() - 9 * 60 * 60 * 1000)
-    const dateKey = offsetDate.toISOString().split('T')[0]
+    const dateKey = offsetDate.toLocaleDateString('zh-CN')
     if (!groups[dateKey]) groups[dateKey] = []
     groups[dateKey].push(log)
   })
@@ -75,7 +75,7 @@ const milkTargetStats = computed(() => {
   if (!groupedLogs.value || groupedLogs.value.length === 0) return null
   const now = new Date()
   const todayOffset = new Date(now.getTime() - 9 * 60 * 60 * 1000)
-  const todayKey = todayOffset.toISOString().split('T')[0]
+  const todayKey = todayOffset.toLocaleDateString('zh-CN')
   const todayGroup = groupedLogs.value.find((g) => g.dateKey === todayKey)
   const todayTotal = todayGroup ? todayGroup.total : 0
   const pastGroups = groupedLogs.value.filter((g) => g.dateKey < todayKey)
@@ -170,11 +170,11 @@ const groupedActivities = computed(() => {
   const now = new Date()
   const fiveDaysAgo = new Date(now)
   fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5)
-  const thresholdKey = fiveDaysAgo.toISOString().split('T')[0]
+  const thresholdKey = fiveDaysAgo.toLocaleDateString('zh-CN')
 
   activityList.value.forEach((log) => {
     const date = new Date(log.created_at)
-    const dateKey = date.toISOString().split('T')[0]
+    const dateKey = date.toLocaleDateString('zh-CN')
     if (!groups[dateKey]) groups[dateKey] = []
     groups[dateKey].push(log)
   })

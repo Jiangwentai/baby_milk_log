@@ -21,7 +21,7 @@ const renderChart = () => {
     const date = new Date(log.created_at)
     // 关键点：将时间减去 9 小时
     date.setHours(date.getHours() - 9)
-    const dateString = date.toISOString().split('T')[0] // 获取 YYYY-MM-DD
+    const dateString = date.toLocaleDateString('zh-CN') // 获取 YYYY-MM-DD
 
     dailyData[dateString] = (dailyData[dateString] || 0) + log.amount_ml
   })
