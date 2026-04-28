@@ -51,7 +51,8 @@ const groupedLogs = computed(() => {
   amountList.value.forEach((log) => {
     const date = new Date(log.created_at)
     const offsetDate = new Date(date.getTime() - 9 * 60 * 60 * 1000)
-    const dateKey = offsetDate.toISOString().split('T')[0]
+    const dateKey = offsetDate.toLocaleDateString('en-CA')
+.split('T')[0]
     if (!groups[dateKey]) groups[dateKey] = []
     groups[dateKey].push(log)
   })
@@ -174,7 +175,8 @@ const groupedActivities = computed(() => {
 
   activityList.value.forEach((log) => {
     const date = new Date(log.created_at)
-    const dateKey = date.toISOString().split('T')[0]
+    const dateKey = date.toLocaleDateString('en-CA')
+.split('T')[0]
     if (!groups[dateKey]) groups[dateKey] = []
     groups[dateKey].push(log)
   })
