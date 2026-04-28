@@ -121,7 +121,7 @@ async function saveLog() {
   const payload = {
     amount_ml: parseInt(newAmount.value),
     notes: newNotes.value,
-    created_at: new Date(logTime.value).toLocaleDateString('en-CA'),
+    created_at: new Date(logTime.value).toISOString(),
   }
   const { error } = editingId.value
     ? await supabase.from('milk_logs').update(payload).eq('id', editingId.value)
@@ -226,7 +226,7 @@ async function saveActivity() {
   const payload = {
     type: actType.value,
     notes: actNotes.value,
-    created_at: new Date(actTime.value).toLocaleDateString('en-CA'),
+    created_at: new Date(actTime.value).toISOString(),
   }
   const { error } = actEditingId.value
     ? await supabase.from('activity_logs').update(payload).eq('id', actEditingId.value)
