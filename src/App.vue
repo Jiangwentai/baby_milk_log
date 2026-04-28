@@ -144,16 +144,16 @@ async function deleteLog(id) {
 // ==========================================
 const activityList = ref([])
 const actTime = ref(getCurrentDateTime())
-const actType = ref('💊 AD')
+const actType = ref('☀️ AD')
 const actNotes = ref('')
 const actEditingId = ref(null)
-const activityOptions = ['💊 AD', '🏊 游泳', '💩💩💩', '🛁 洗澡', '🌡️ 体温/生病', '📝 其他']
+const activityOptions = ['☀️ AD', '🏊 游泳', '💩💩💩', '🛁 洗澡', '🌡️ 体温/生病', '📝 其他']
 
 const hasTakenVitaminToday = computed(() => {
   if (!activityList.value.length) return false
   const todayString = new Date().toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
   return activityList.value.some((log) => {
-    if (log.type !== '💊 AD') return false
+    if (log.type !== '☀️ AD') return false
     const logDate = new Date(log.created_at).toLocaleDateString('zh-CN', {
       month: 'numeric',
       day: 'numeric',
@@ -213,7 +213,7 @@ function selectForEditAct(log) {
 
 function cancelEditAct() {
   actEditingId.value = null
-  actType.value = '💊 AD'
+  actType.value = '☀️ AD'
   actNotes.value = ''
   actTime.value = getCurrentDateTime()
 }
