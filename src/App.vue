@@ -14,7 +14,7 @@ const expandedActDates = ref([]) // 日常页面的展开记录
 function getCurrentDateTime() {
   const now = new Date()
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-  return now.toISOString().slice(0, 16)
+  return now.toString().slice(0, 16)
 }
 
 // 切换折叠状态 (通用逻辑)
@@ -101,7 +101,7 @@ function selectForEdit(log) {
   newNotes.value = log.notes || ''
   const date = new Date(log.created_at)
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  logTime.value = date.toISOString().slice(0, 16)
+  logTime.value = date.toString().slice(0, 16)
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -207,7 +207,7 @@ function selectForEditAct(log) {
   actNotes.value = log.notes || ''
   const date = new Date(log.created_at)
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  actTime.value = date.toISOString().slice(0, 16)
+  actTime.value = date.toString().slice(0, 16)
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
