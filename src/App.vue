@@ -14,7 +14,7 @@ const expandedActDates = ref([]) // 日常页面的展开记录
 function getCurrentDateTime() {
   const now = new Date()
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-  return now.toISOString().slice(0, 16)
+  return now.toLocaleDateString('en-CA').slice(0, 16)
 }
 
 // 切换折叠状态 (通用逻辑)
@@ -46,7 +46,7 @@ const groupedLogs = computed(() => {
   const todayOffset = new Date(now.getTime() - 9 * 60 * 60 * 1000)
   const threeDaysAgo = new Date(todayOffset)
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-  const thresholdKey = threeDaysAgo.toISOString().split('T')[0]
+  const thresholdKey = threeDaysAgo.toLocaleDateString('en-CA').split('T')[0]
 
   amountList.value.forEach((log) => {
     const date = new Date(log.created_at)
@@ -76,7 +76,7 @@ const milkTargetStats = computed(() => {
   if (!groupedLogs.value || groupedLogs.value.length === 0) return null
   const now = new Date()
   const todayOffset = new Date(now.getTime() - 9 * 60 * 60 * 1000)
-  const todayKey = todayOffset.toISOString().split('T')[0]
+  const todayKey = todayOffset.toLocaleDateString('en-CA').split('T')[0]
   const todayGroup = groupedLogs.value.find((g) => g.dateKey === todayKey)
   const todayTotal = todayGroup ? todayGroup.total : 0
   const pastGroups = groupedLogs.value.filter((g) => g.dateKey < todayKey)
@@ -102,7 +102,7 @@ function selectForEdit(log) {
   newNotes.value = log.notes || ''
   const date = new Date(log.created_at)
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  logTime.value = date.toISOString().slice(0, 16)
+  logTime.value = date.toLocaleDateString('en-CA').slice(0, 16)
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -121,7 +121,7 @@ async function saveLog() {
   const payload = {
     amount_ml: parseInt(newAmount.value),
     notes: newNotes.value,
-    created_at: new Date(logTime.value).toISOString(),
+    created_at: new Date(logTime.value).toLocaleDateString('en-CA'),
   }
   const { error } = editingId.value
     ? await supabase.from('milk_logs').update(payload).eq('id', editingId.value)
@@ -171,7 +171,7 @@ const groupedActivities = computed(() => {
   const now = new Date()
   const fiveDaysAgo = new Date(now)
   fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5)
-  const thresholdKey = fiveDaysAgo.toISOString().split('T')[0]
+  const thresholdKey = fiveDaysAgo.toLocaleDateString('en-CA').split('T')[0]
 
   activityList.value.forEach((log) => {
     const date = new Date(log.created_at)
@@ -209,7 +209,7 @@ function selectForEditAct(log) {
   actNotes.value = log.notes || ''
   const date = new Date(log.created_at)
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  actTime.value = date.toISOString().slice(0, 16)
+  actTime.value = date.toLocaleDateString('en-CA').slice(0, 16)
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -226,7 +226,7 @@ async function saveActivity() {
   const payload = {
     type: actType.value,
     notes: actNotes.value,
-    created_at: new Date(actTime.value).toISOString(),
+    created_at: new Date(actTime.value).toLocaleDateString('en-CA'),
   }
   const { error } = actEditingId.value
     ? await supabase.from('activity_logs').update(payload).eq('id', actEditingId.value)
