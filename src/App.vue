@@ -14,7 +14,7 @@ const expandedActDates = ref([]) // 日常页面的展开记录
 function getCurrentDateTime() {
   const now = new Date()
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-  return now.toString().slice(0, 16)
+  return now.toISOString().slice(0, 16)
 }
 
 // 切换折叠状态 (通用逻辑)
@@ -101,7 +101,7 @@ function selectForEdit(log) {
   newNotes.value = log.notes || ''
   const date = new Date(log.created_at)
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  logTime.value = date.toString().slice(0, 16)
+  logTime.value = date.toISOString().slice(0, 16)
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -207,7 +207,7 @@ function selectForEditAct(log) {
   actNotes.value = log.notes || ''
   const date = new Date(log.created_at)
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  actTime.value = date.toString().slice(0, 16)
+  actTime.value = date.toISOString().slice(0, 16)
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -562,14 +562,17 @@ select {
 }
 
 /* 针对苹果设备的 datetime-local 修复补丁 */
+/* 针对苹果设备的 datetime-local 修复补丁 */
 input[type='datetime-local'] {
   /* 强制它的最大宽度不能超过父元素 */
+  max-width: 100%;
+  box-sizing: border-box;
 
   /* 苹果默认的内边距太大，左右边距缩小到 2px 给文字腾空间 */
   padding: 10px 2px;
 
   /* 稍微缩小一点点字号，防止撑爆 */
-  font-size: 0.5rem;
+  font-size: 0.9rem;
 
   /* 清除苹果默认的 UI 渲染样式（比如内阴影） */
   -webkit-appearance: none;
