@@ -147,7 +147,7 @@ const actTime = ref(getCurrentDateTime())
 const actType = ref('☀️ AD')
 const actNotes = ref('')
 const actEditingId = ref(null)
-const activityOptions = ['☀️ AD', '🏊 游泳', '💩💩💩', '🛁 洗澡', '🌡️ 体温/生病', '📝 其他']
+const activityOptions = ['☀️ AD', '🏊 游泳', '💩💩💩', '🛁 洗澡', '🌡️ 体温', '📝 其他']
 
 const hasTakenVitaminToday = computed(() => {
   if (!activityList.value.length) return false
