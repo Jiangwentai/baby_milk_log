@@ -147,7 +147,15 @@ const actTime = ref(getCurrentDateTime())
 const actType = ref('☀️ AD')
 const actNotes = ref('')
 const actEditingId = ref(null)
-const activityOptions = ['☀️ AD', '🏊 游泳', '💩💩💩', '🛁 洗澡', '🌡️ 体温', '📝 其他']
+const activityOptions = [
+  '☀️ AD',
+  '🏊 游泳',
+  '💩💩💩',
+  '🛁 洗澡',
+  '🌡️ 体温',
+  '⚖️ 身高/体重',
+  '📝 其他',
+]
 
 const hasTakenVitaminToday = computed(() => {
   if (!activityList.value.length) return false
@@ -357,6 +365,8 @@ onMounted(() => {
                     >⏰
                     {{
                       new Date(log.created_at).toLocaleTimeString('zh-CN', {
+                        month: '2-digit',
+                        day: '2-digit',
                         hour: '2-digit',
                         minute: '2-digit',
                       })
@@ -432,6 +442,8 @@ onMounted(() => {
                     >⏰
                     {{
                       new Date(log.created_at).toLocaleTimeString('zh-CN', {
+                        month: '2-digit',
+                        day: '2-digit',
                         hour: '2-digit',
                         minute: '2-digit',
                       })
