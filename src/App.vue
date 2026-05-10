@@ -46,12 +46,12 @@ const groupedLogs = computed(() => {
   const todayOffset = new Date(now.getTime() - 9 * 60 * 60 * 1000)
   const threeDaysAgo = new Date(todayOffset)
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-  const thresholdKey = threeDaysAgo.toLocaleDateString('zh-CN')
+  const thresholdKey = threeDaysAgo.toLocaleDateString('sv-SE')
 
   amountList.value.forEach((log) => {
     const date = new Date(log.created_at)
     const offsetDate = new Date(date.getTime() - 9 * 60 * 60 * 1000)
-    const dateKey = offsetDate.toLocaleDateString('zh-CN')
+    const dateKey = offsetDate.toLocaleDateString('sv-SE')
     if (!groups[dateKey]) groups[dateKey] = []
     groups[dateKey].push(log)
   })
@@ -75,7 +75,7 @@ const milkTargetStats = computed(() => {
   if (!groupedLogs.value || groupedLogs.value.length === 0) return null
   const now = new Date()
   const todayOffset = new Date(now.getTime() - 9 * 60 * 60 * 1000)
-  const todayKey = todayOffset.toLocaleDateString('zh-CN')
+  const todayKey = todayOffset.toLocaleDateString('sv-SE')
   const todayGroup = groupedLogs.value.find((g) => g.dateKey === todayKey)
   const todayTotal = todayGroup ? todayGroup.total : 0
   const pastGroups = groupedLogs.value.filter((g) => g.dateKey < todayKey)
@@ -159,10 +159,10 @@ const activityOptions = [
 
 const hasTakenVitaminToday = computed(() => {
   if (!activityList.value.length) return false
-  const todayString = new Date().toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+  const todayString = new Date().toLocaleDateString('sv-SE', { month: 'numeric', day: 'numeric' })
   return activityList.value.some((log) => {
     if (log.type !== '☀️ AD') return false
-    const logDate = new Date(log.created_at).toLocaleDateString('zh-CN', {
+    const logDate = new Date(log.created_at).toLocaleDateString('sv-SE', {
       month: 'numeric',
       day: 'numeric',
     })
@@ -178,11 +178,11 @@ const groupedActivities = computed(() => {
   const now = new Date()
   const fiveDaysAgo = new Date(now)
   fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5)
-  const thresholdKey = fiveDaysAgo.toLocaleDateString('zh-CN')
+  const thresholdKey = fiveDaysAgo.toLocaleDateString('sv-SE')
 
   activityList.value.forEach((log) => {
     const date = new Date(log.created_at)
-    const dateKey = date.toLocaleDateString('zh-CN')
+    const dateKey = date.toLocaleDateString('sv-SE')
     if (!groups[dateKey]) groups[dateKey] = []
     groups[dateKey].push(log)
   })
@@ -364,7 +364,7 @@ onMounted(() => {
                   <span class="log-time"
                     >⏰
                     {{
-                      new Date(log.created_at).toLocaleTimeString('zh-CN', {
+                      new Date(log.created_at).toLocaleTimeString('sv-SE', {
                         month: '2-digit',
                         day: '2-digit',
                         hour: '2-digit',
@@ -441,7 +441,7 @@ onMounted(() => {
                   <span class="log-time"
                     >⏰
                     {{
-                      new Date(log.created_at).toLocaleTimeString('zh-CN', {
+                      new Date(log.created_at).toLocaleTimeString('sv-SE', {
                         month: '2-digit',
                         day: '2-digit',
                         hour: '2-digit',
