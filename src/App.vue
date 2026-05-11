@@ -251,6 +251,22 @@ async function deleteActivity(id) {
   }
 }
 
+const BIRTHDAY = new Date('2026-01-18')
+
+// 2. 计算今天是出生后的第几天
+const daysOld = computed(() => {
+  const today = new Date()
+  // 将时间对齐到今天的 0 点，避免因时分秒导致计算不准
+  today.setHours(0, 0, 0, 0)
+  const birthday = new Date(BIRTHDAY)
+  birthday.setHours(0, 0, 0, 0)
+
+  const diffTime = today.getTime() - birthday.getTime()
+  // 1天 = 24 * 60 * 60 * 1000 毫秒
+  // 通常出生当天算第 1 天，所以最后要 +1
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1
+})
+
 // ==========================================
 // 🚀 初始化
 // ==========================================
@@ -284,6 +300,8 @@ onMounted(() => {
       <header class="header">
         <div class="title-group">
           <h1>小晞晞健康成长 🍼👼🌿v1.0</h1>
+          <h2>第 {{ daysOld }}天</h2>
+
           <h2>{{ activeTab === 'milk' ? '🍼 喝奶记录' : '🌟 日常记录' }}</h2>
         </div>
 
