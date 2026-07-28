@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/baby_milk_log/',
+  base: '/',
   plugins: [
     vue(),
     VitePWA({
