@@ -1,31 +1,56 @@
 <script setup>
 import { ref } from 'vue'
-import { supabase } from '../supabase'
+import { api } from '../supabase'
 
+const isLoginMode = ref(true) 
 const username = ref('')
 const password = ref('')
+const confirmPassword = ref('') 
+const displayName = ref('') 
+const birthday = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
 
-const handleLogin = async () => {
-  // 1. 前端第一层拦截：检查是否是专属密码 xixi
-  if (username.value !== 'xixi' || password.value !== 'xixi') {
-    errorMsg.value = '口令错误，这不是 xixi 的专属记录本哦！'
+// 切换模式并清空状态
+const toggleMode = () => {
+  isLoginMode.value = !isLoginMode.value
+  errorMsg.value = ''
+  password.value = ''
+  confirmPassword.value = ''
+  birthday.value = ''
+}
+
+const handleSubmit = async () => {
+  if (!username.value || !password.value) {
+    errorMsg.value = '请输入用户名和密码'
     return
+  }
+  
+  if (!isLoginMode.value) {
+    if (!displayName.value || !birthday.value) {
+      errorMsg.value = '请输入宝宝昵称并选择出生日期'
+      return
+    }
+    if (password.value !== confirmPassword.value) {
+      errorMsg.value = '两次输入的密码不一致，请重新输入'
+      return
+    }
   }
 
   loading.value = true
   errorMsg.value = ''
 
-  // 2. 后台静默登录：映射到真实的 Supabase 凭证
-  const { error } = await supabase.auth.signInWithPassword({
-    email: 'xixi@gmail.com', // 替换为你刚才在后台创建的邮箱
-    password: 'xixi20260128', // 替换为你刚才在后台创建的密码
-  })
+  let result
+  if (isLoginMode.value) {
+    result = await api.login(username.value, password.value)
+  } else {
+    result = await api.register(username.value, password.value, displayName.value, birthday.value)
+  }
 
-  if (error) {
-    errorMsg.value = '服务器连接失败，请检查配置'
-    console.error('Supabase 登录失败:', error)
+  if (result.error) {
+    errorMsg.value = result.error.message || (isLoginMode.value ? '登录失败' : '注册失败')
+  } else {
+    window.location.reload()
   }
 
   loading.value = false
@@ -34,15 +59,44 @@ const handleLogin = async () => {
 
 <template>
   <div class="auth-container">
-    <h2>🍼 xixi 专属记录</h2>
-    <input v-model="username" type="text" placeholder="请输入用户名" />
-    <input v-model="password" type="password" placeholder="请输入密码" />
+    <h2>🍼 宝宝专属记录</h2>
+    
+    <div class="form-group">
+      <input v-model="username" type="text" placeholder="设置账户名 (如 xixi)" />
+      
+      <input 
+        v-if="!isLoginMode" 
+        v-model="displayName" 
+        type="text" 
+        placeholder="输入显示昵称 (如: 小晞晞)" 
+      />
+      
+      <input v-model="password" type="password" placeholder="请输入密码" />
+      
+      <input 
+        v-if="!isLoginMode" 
+        v-model="confirmPassword" 
+        type="password" 
+        placeholder="请再次确认密码" 
+      />
+
+      <input 
+        v-if="!isLoginMode" 
+        v-model="birthday" 
+        type="date" 
+        placeholder="请选择宝宝出生日期" 
+      />
+    </div>
 
     <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
 
-    <button @click="handleLogin" :disabled="loading">
-      {{ loading ? '进入中...' : '登录' }}
+    <button @click="handleSubmit" :disabled="loading" class="btn-submit">
+      {{ loading ? '处理中...' : (isLoginMode ? '登录' : '注册并进入') }}
     </button>
+
+    <p class="toggle-mode" @click="toggleMode">
+      {{ isLoginMode ? '没有账号？点击注册新账号' : '已有账号？点击返回登录' }}
+    </p>
   </div>
 </template>
 
@@ -55,12 +109,17 @@ const handleLogin = async () => {
   margin: 80px auto;
   text-align: center;
 }
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 input {
   padding: 10px;
   border: 1px solid #ddd;
   border-radius: 6px;
 }
-button {
+.btn-submit {
   padding: 10px;
   background: #42b883;
   color: white;
@@ -69,12 +128,19 @@ button {
   cursor: pointer;
   font-weight: bold;
 }
-button:disabled {
+.btn-submit:disabled {
   background: #a0d8c0;
 }
 .error {
   color: #ff4d4d;
   font-size: 0.9em;
   margin: 0;
+}
+.toggle-mode {
+  font-size: 0.85em;
+  color: #3498db;
+  cursor: pointer;
+  margin-top: 5px;
+  text-decoration: underline;
 }
 </style>

@@ -1,15 +1,19 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { supabase } from './supabase'
+import { getCurrentAccount, clearCurrentAccount } from './supabase'
 import UserAuth from './components/UserAuth.vue'
 import MilkChart from './components/MilkChart.vue'
+import axios from 'axios'
+
+const API_BASE_URL = '/api'
 
 // ==== 全局状态 ====
 const session = ref(null)
+const currentAccount = ref(null)
 const activeTab = ref('milk')
 const loading = ref(false)
-const expandedDates = ref([]) // 喝奶页面的展开记录
-const expandedActDates = ref([]) // 日常页面的展开记录
+const expandedDates = ref([]) 
+const expandedActDates = ref([]) 
 
 function getCurrentDateTime() {
   const now = new Date()
@@ -17,10 +21,7 @@ function getCurrentDateTime() {
   return now.toISOString().slice(0, 16)
 }
 
-// 切换折叠状态 (通用逻辑)
-// 切换折叠状态 (修复版)
 function toggleFold(dateKey, targetList) {
-  // 因为从 template 传进来的已经是解包后的数组，所以不需要加 .value
   const index = targetList.indexOf(dateKey)
   if (index > -1) {
     targetList.splice(index, 1)
@@ -28,6 +29,7 @@ function toggleFold(dateKey, targetList) {
     targetList.push(dateKey)
   }
 }
+
 // ==========================================
 // 🍼 模块一：喝奶记录相关的状态与方法
 // ==========================================
@@ -40,8 +42,6 @@ const editingId = ref(null)
 const groupedLogs = computed(() => {
   if (!amountList.value.length) return []
   const groups = {}
-
-  // 3天折叠阈值
   const now = new Date()
   const todayOffset = new Date(now.getTime() - 9 * 60 * 60 * 1000)
   const threeDaysAgo = new Date(todayOffset)
@@ -88,11 +88,15 @@ const milkTargetStats = computed(() => {
 })
 
 async function fetchLogs() {
-  const { data } = await supabase
-    .from('milk_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (data) amountList.value = data
+  if (!currentAccount.value) return
+  try {
+    const res = await axios.get(`${API_BASE_URL}/milk_logs/${currentAccount.value.account_id}`)
+    if (res.data && res.data.data) {
+      amountList.value = res.data.data
+    }
+  } catch (err) {
+    console.error('获取喝奶记录失败', err)
+  }
 }
 
 function selectForEdit(log) {
@@ -117,25 +121,40 @@ async function saveLog() {
   const actionName = editingId.value ? '修改' : '新增'
   if (!window.confirm(`确认${actionName}奶粉记录？`)) return
   loading.value = true
-  const payload = {
-    amount_ml: parseInt(newAmount.value),
-    notes: newNotes.value,
-    created_at: new Date(logTime.value).toISOString(),
-  }
-  const { error } = editingId.value
-    ? await supabase.from('milk_logs').update(payload).eq('id', editingId.value)
-    : await supabase.from('milk_logs').insert([payload])
-  if (!error) {
+
+  try {
+    if (editingId.value) {
+      // 修改
+      await axios.put(`${API_BASE_URL}/milk_logs/${editingId.value}`, {
+        amount_ml: parseInt(newAmount.value),
+        notes: newNotes.value,
+        created_at: new Date(logTime.value).toISOString(),
+      })
+    } else {
+      // 新增（必须带上 account_id 保证多租户隔离）
+      await axios.post(`${API_BASE_URL}/milk_logs`, {
+        account_id: currentAccount.value.account_id,
+        amount_ml: parseInt(newAmount.value),
+        notes: newNotes.value,
+        created_at: new Date(logTime.value).toISOString(),
+      })
+    }
     cancelEdit()
     fetchLogs()
-  } else alert('操作失败: ' + error.message)
+  } catch (err) {
+    alert('操作失败: ' + (err.response?.data?.detail || err.message))
+  }
   loading.value = false
 }
 
 async function deleteLog(id) {
   if (confirm('确定要删除这条记录吗？')) {
-    await supabase.from('milk_logs').delete().eq('id', id)
-    fetchLogs()
+    try {
+      await axios.delete(`${API_BASE_URL}/milk_logs/${id}`)
+      fetchLogs()
+    } catch (err) {
+      alert('删除失败')
+    }
   }
 }
 
@@ -173,8 +192,6 @@ const hasTakenVitaminToday = computed(() => {
 const groupedActivities = computed(() => {
   if (!activityList.value.length) return []
   const groups = {}
-
-  // 5 天折叠阈值
   const now = new Date()
   const fiveDaysAgo = new Date(now)
   fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5)
@@ -202,11 +219,15 @@ const groupedActivities = computed(() => {
 })
 
 async function fetchActivities() {
-  const { data } = await supabase
-    .from('activity_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (data) activityList.value = data
+  if (!currentAccount.value) return
+  try {
+    const res = await axios.get(`${API_BASE_URL}/activity_logs/${currentAccount.value.account_id}`)
+    if (res.data && res.data.data) {
+      activityList.value = res.data.data
+    }
+  } catch (err) {
+    console.error('获取日常活动失败', err)
+  }
 }
 
 function selectForEditAct(log) {
@@ -229,66 +250,73 @@ function cancelEditAct() {
 async function saveActivity() {
   if (!window.confirm(`确认保存日常记录吗？`)) return
   loading.value = true
-  const payload = {
-    type: actType.value,
-    notes: actNotes.value,
-    created_at: new Date(actTime.value).toISOString(),
-  }
-  const { error } = actEditingId.value
-    ? await supabase.from('activity_logs').update(payload).eq('id', actEditingId.value)
-    : await supabase.from('activity_logs').insert([payload])
-  if (!error) {
+  try {
+    if (actEditingId.value) {
+      await axios.put(`${API_BASE_URL}/activity_logs/${actEditingId.value}`, {
+        type: actType.value,
+        notes: actNotes.value,
+        created_at: new Date(actTime.value).toISOString(),
+      })
+    } else {
+      await axios.post(`${API_BASE_URL}/activity_logs`, {
+        account_id: currentAccount.value.account_id,
+        type: actType.value,
+        notes: actNotes.value,
+        created_at: new Date(actTime.value).toISOString(),
+      })
+    }
     cancelEditAct()
     fetchActivities()
-  } else alert('操作失败: ' + error.message)
+  } catch (err) {
+    alert('操作失败')
+  }
   loading.value = false
 }
 
 async function deleteActivity(id) {
   if (confirm('确定要删除这条记录吗？')) {
-    await supabase.from('activity_logs').delete().eq('id', id)
-    fetchActivities()
+    try {
+      await axios.delete(`${API_BASE_URL}/activity_logs/${id}`)
+      fetchActivities()
+    } catch (err) {
+      alert('删除失败')
+    }
   }
 }
 
-const BIRTHDAY = new Date('2026-01-18')
-
-// 2. 计算今天是出生后的第几天
 const daysOld = computed(() => {
+  // 如果没获取到账户信息，或者该账户(旧账户)没有填生日，默认显示 0
+  if (!currentAccount.value || !currentAccount.value.birthday) return 0
+  
+  const birthDate = new Date(currentAccount.value.birthday)
   const today = new Date()
-  // 将时间对齐到今天的 0 点，避免因时分秒导致计算不准
+  
+  // 将时间都归零到午夜，避免因为时分秒导致的天数误差
+  birthDate.setHours(0, 0, 0, 0)
   today.setHours(0, 0, 0, 0)
-  const birthday = new Date(BIRTHDAY)
-  birthday.setHours(0, 0, 0, 0)
-
-  const diffTime = today.getTime() - birthday.getTime()
-  // 1天 = 24 * 60 * 60 * 1000 毫秒
-  // 通常出生当天算第 1 天，所以最后要 +1
-  return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1
+  
+  const diffTime = today - birthDate
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1 // 加 1 代表出生当天算第 1 天 (视你的习惯可去掉)
 })
 
 // ==========================================
-// 🚀 初始化
+// 🚀 初始化与登出
 // ==========================================
-const handleLogout = async () => {
-  await supabase.auth.signOut()
+const handleLogout = () => {
+  clearCurrentAccount()
+  session.value = null
+  currentAccount.value = null
+  window.location.reload()
 }
 
 onMounted(() => {
-  supabase.auth.getSession().then(({ data }) => {
-    session.value = data.session
-    if (session.value) {
-      fetchLogs()
-      fetchActivities()
-    }
-  })
-  supabase.auth.onAuthStateChange((_event, _session) => {
-    session.value = _session
-    if (_session) {
-      fetchLogs()
-      fetchActivities()
-    }
-  })
+  const account = getCurrentAccount()
+  if (account) {
+    currentAccount.value = account
+    session.value = true
+    fetchLogs()
+    fetchActivities()
+  }
 })
 </script>
 
@@ -297,25 +325,22 @@ onMounted(() => {
     <div v-if="!session" class="auth-screen"><UserAuth /></div>
 
     <main v-else class="container">
-      <header class="header">
-        <div class="title-group">
-          <h1>小晞晞健康成长 🍼👼🌿v1.0</h1>
-          <h2>第 {{ daysOld }}天</h2>
-
-          <h2>{{ activeTab === 'milk' ? '🍼 喝奶记录' : '🌟 日常记录' }}</h2>
-        </div>
-
-        <button @click="handleLogout" class="btn-logout">退出</button>
-      </header>
+<header class="header">
+  <div class="title-group">
+    <!-- 标题直接动态显示当前宝宝的昵称 -->
+    <h1>{{ currentAccount?.display_name || '宝宝' }} 的健康成长 🍼👼🌿</h1>
+    <h2>第 {{ daysOld }}天</h2>
+    <h2>{{ activeTab === 'milk' ? '🍼 喝奶记录' : '🌟 日常记录' }}</h2>
+  </div>
+  <button @click="handleLogout" class="btn-logout">退出</button>
+</header>
 
       <div v-show="activeTab === 'milk'" class="tab-content">
         <div class="status-board" :class="hasTakenVitaminToday ? 'status-ok' : 'status-warn'">
           <div class="status-left">
             <div class="main-status">
               <span class="status-icon">{{ hasTakenVitaminToday ? '✅' : '⚠️' }}</span>
-              <span class="status-text">{{
-                hasTakenVitaminToday ? '今日已吃AD' : '今日还没吃AD哦'
-              }}</span>
+              <span class="status-text">{{ hasTakenVitaminToday ? '今日已吃AD' : '今日还没吃AD哦' }}</span>
             </div>
             <div class="sub-status" v-if="milkTargetStats">
               <span class="sub-icon">{{ milkTargetStats.isAchieved ? '🎉' : '🍼' }}</span>
@@ -489,6 +514,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* 保持你原本优美的 CSS 样式不变 */
 .app-wrapper {
   min-height: 100vh;
   background: #f0f2f5;
@@ -499,37 +525,29 @@ onMounted(() => {
   margin: 0 auto;
   padding: 15px;
 }
-/* 头部整体布局保持横向两端对齐 */
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: center; /* 也可以改成 flex-start 让退出按钮靠上 */
+  align-items: center;
   margin-bottom: 15px;
 }
-
-/* 👉 新增：标题组变成纵向排列 */
 .title-group {
   display: flex;
   flex-direction: column;
-  gap: 4px; /* 两个标题之间的上下间距 */
+  gap: 4px;
 }
-
-/* 主标题样式 */
 .title-group h1 {
   text-align: center;
   font-size: 1.25rem;
   color: #2c3e50;
   margin: 0;
 }
-
-/* 副标题样式 */
 .title-group h2 {
   font-size: 0.85rem;
   color: #7f8c8d;
   margin: 0;
   font-weight: normal;
 }
-
 .card {
   background: white;
   border-radius: 12px;
@@ -537,7 +555,6 @@ onMounted(() => {
   margin-bottom: 15px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
-
 .status-board {
   display: flex;
   align-items: center;
@@ -578,7 +595,6 @@ onMounted(() => {
 .status-icon {
   margin-right: 8px;
 }
-
 .editing-mode {
   border: 2px solid #42b883;
 }
@@ -615,28 +631,15 @@ select {
   width: 100%;
   box-sizing: border-box;
 }
-
-/* 针对苹果设备的 datetime-local 修复补丁 */
-/* 针对苹果设备的 datetime-local 修复补丁 */
 input[type='datetime-local'] {
-  /* 强制它的最大宽度不能超过父元素 */
   max-width: 100%;
   box-sizing: border-box;
-
-  /* 苹果默认的内边距太大，左右边距缩小到 2px 给文字腾空间 */
   padding: 10px 2px;
-
-  /* 稍微缩小一点点字号，防止撑爆 */
   font-size: 0.9rem;
-
-  /* 清除苹果默认的 UI 渲染样式（比如内阴影） */
   -webkit-appearance: none;
   appearance: none;
-
-  /* 居中显示，看起来更协调 */
   text-align: center;
 }
-
 .btn-primary {
   width: 100%;
   padding: 12px;
@@ -646,7 +649,6 @@ input[type='datetime-local'] {
   border-radius: 8px;
   font-weight: bold;
 }
-
 .group-header {
   display: flex;
   justify-content: space-between;
@@ -679,7 +681,6 @@ input[type='datetime-local'] {
   color: #888;
   font-size: 0.85rem;
 }
-
 .log-grid {
   display: flex;
   flex-direction: column;
@@ -735,7 +736,6 @@ input[type='datetime-local'] {
   font-size: 0.85rem;
   color: #666;
 }
-
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -765,5 +765,14 @@ input[type='datetime-local'] {
 .nav-text {
   font-size: 0.7rem;
   font-weight: bold;
+}
+.btn-logout {
+  background: #fee;
+  color: #e74c3c;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
 }
 </style>
