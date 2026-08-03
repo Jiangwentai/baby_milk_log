@@ -40,7 +40,13 @@ export default defineConfig({
     },
   },
 
-  // server: {
-  //   host: '0.0.0.0', // 监听所有局域网地址
-  // },
+  server: {
+    host: '0.0.0.0', // 监听所有局域网地址
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
+    },
+  },
 })

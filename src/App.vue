@@ -1,8 +1,9 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { getCurrentAccount, clearCurrentAccount } from './supabase'
+import { getCurrentAccount, clearCurrentAccount } from './api'
 import UserAuth from './components/UserAuth.vue'
 import MilkChart from './components/MilkChart.vue'
+import GrowthChart from './components/GrowthChart.vue'
 import axios from 'axios'
 
 const API_BASE_URL = '/api'
@@ -14,6 +15,8 @@ const activeTab = ref('milk')
 const loading = ref(false)
 const expandedDates = ref([])
 const expandedActDates = ref([])
+const expandedGrowthDates = ref([])
+const expandedMileDates = ref([])
 
 function getCurrentDateTime() {
   const now = new Date()
@@ -152,7 +155,99 @@ async function deleteLog(id) {
     try {
       await axios.delete(`${API_BASE_URL}/milk_logs/${id}`)
       fetchLogs()
-    } catch (err) {
+    } catch {
+      alert('删除失败')
+    }
+  }
+}
+
+// ==========================================
+// 🥣 模块一.5：辅食记录相关的状态与方法
+// ==========================================
+const foodList = ref([])
+const foodTime = ref(getCurrentDateTime())
+const newFoodAmount = ref('')
+const newFoodNotes = ref('')
+const foodEditingId = ref(null)
+
+const foodByDay = computed(() => {
+  const map = {}
+  if (!foodList.value.length) return map
+  foodList.value.forEach((log) => {
+    const date = new Date(log.created_at)
+    const offsetDate = new Date(date.getTime() - 9 * 60 * 60 * 1000)
+    const dateKey = offsetDate.toLocaleDateString('sv-SE')
+    if (!map[dateKey]) map[dateKey] = { logs: [], total: 0 }
+    map[dateKey].logs.push(log)
+    map[dateKey].total += log.amount_g
+  })
+  return map
+})
+
+async function fetchFood() {
+  if (!currentAccount.value) return
+  try {
+    const res = await axios.get(`${API_BASE_URL}/food_logs/${currentAccount.value.account_id}`)
+    if (res.data && res.data.data) {
+      foodList.value = res.data.data
+    }
+  } catch (err) {
+    console.error('获取辅食记录失败', err)
+  }
+}
+
+function selectForEditFood(log) {
+  foodEditingId.value = log.id
+  newFoodAmount.value = log.amount_g
+  newFoodNotes.value = log.notes || ''
+  const date = new Date(log.created_at)
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  foodTime.value = date.toISOString().slice(0, 16)
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function cancelEditFood() {
+  foodEditingId.value = null
+  newFoodAmount.value = ''
+  newFoodNotes.value = ''
+  foodTime.value = getCurrentDateTime()
+}
+
+async function saveFood() {
+  if (!newFoodAmount.value) return alert('请输入辅食量')
+  const actionName = foodEditingId.value ? '修改' : '新增'
+  if (!window.confirm(`确认${actionName}辅食记录？`)) return
+  loading.value = true
+
+  try {
+    if (foodEditingId.value) {
+      await axios.put(`${API_BASE_URL}/food_logs/${foodEditingId.value}`, {
+        amount_g: parseInt(newFoodAmount.value),
+        notes: newFoodNotes.value,
+        created_at: new Date(foodTime.value).toISOString(),
+      })
+    } else {
+      await axios.post(`${API_BASE_URL}/food_logs`, {
+        account_id: currentAccount.value.account_id,
+        amount_g: parseInt(newFoodAmount.value),
+        notes: newFoodNotes.value,
+        created_at: new Date(foodTime.value).toISOString(),
+      })
+    }
+    cancelEditFood()
+    fetchFood()
+  } catch (err) {
+    alert('操作失败: ' + (err.response?.data?.detail || err.message))
+  }
+  loading.value = false
+}
+
+async function deleteFood(id) {
+  if (confirm('确定要删除这条记录吗？')) {
+    try {
+      await axios.delete(`${API_BASE_URL}/food_logs/${id}`)
+      fetchFood()
+    } catch {
       alert('删除失败')
     }
   }
@@ -267,7 +362,7 @@ async function saveActivity() {
     }
     cancelEditAct()
     fetchActivities()
-  } catch (err) {
+  } catch {
     alert('操作失败')
   }
   loading.value = false
@@ -278,11 +373,231 @@ async function deleteActivity(id) {
     try {
       await axios.delete(`${API_BASE_URL}/activity_logs/${id}`)
       fetchActivities()
-    } catch (err) {
+    } catch {
       alert('删除失败')
     }
   }
 }
+
+// ==========================================
+// 📏 模块三：生长记录（身高体重）
+// ==========================================
+const growthList = ref([])
+const growthTime = ref(getCurrentDateTime())
+const growthHeight = ref('')
+const growthWeight = ref('')
+const growthNotes = ref('')
+const growthEditingId = ref(null)
+
+const groupedGrowth = computed(() => {
+  if (!growthList.value.length) return []
+  const groups = {}
+  const now = new Date()
+  const sevenDaysAgo = new Date(now.getTime() - 9 * 60 * 60 * 1000)
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  const thresholdKey = sevenDaysAgo.toLocaleDateString('sv-SE')
+
+  growthList.value.forEach((log) => {
+    const date = new Date(log.created_at)
+    const offsetDate = new Date(date.getTime() - 9 * 60 * 60 * 1000)
+    const dateKey = offsetDate.toLocaleDateString('sv-SE')
+    if (!groups[dateKey]) groups[dateKey] = []
+    groups[dateKey].push(log)
+  })
+
+  return Object.keys(groups)
+    .sort()
+    .reverse()
+    .map((dateKey) => {
+      const d = new Date(dateKey)
+      return {
+        dateKey,
+        displayDate: `${d.getMonth() + 1}月${d.getDate()}日`,
+        logs: groups[dateKey],
+        isOld: dateKey < thresholdKey,
+      }
+    })
+})
+
+async function fetchGrowth() {
+  if (!currentAccount.value) return
+  try {
+    const res = await axios.get(`${API_BASE_URL}/growth_logs/${currentAccount.value.account_id}`)
+    if (res.data && res.data.data) {
+      growthList.value = res.data.data
+    }
+  } catch (err) {
+    console.error('获取生长记录失败', err)
+  }
+}
+
+function selectForEditGrowth(log) {
+  growthEditingId.value = log.id
+  growthHeight.value = log.height_cm == null ? '' : log.height_cm
+  growthWeight.value = log.weight_kg == null ? '' : log.weight_kg
+  growthNotes.value = log.notes || ''
+  const date = new Date(log.created_at)
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  growthTime.value = date.toISOString().slice(0, 16)
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function cancelEditGrowth() {
+  growthEditingId.value = null
+  growthHeight.value = ''
+  growthWeight.value = ''
+  growthNotes.value = ''
+  growthTime.value = getCurrentDateTime()
+}
+
+async function saveGrowth() {
+  if (!growthHeight.value && !growthWeight.value) return alert('请至少填写身高或体重')
+  const actionName = growthEditingId.value ? '修改' : '新增'
+  if (!window.confirm(`确认${actionName}生长记录？`)) return
+  loading.value = true
+  try {
+    const payload = {
+      height_cm: growthHeight.value ? parseFloat(growthHeight.value) : null,
+      weight_kg: growthWeight.value ? parseFloat(growthWeight.value) : null,
+      notes: growthNotes.value,
+      created_at: new Date(growthTime.value).toISOString(),
+    }
+    if (growthEditingId.value) {
+      await axios.put(`${API_BASE_URL}/growth_logs/${growthEditingId.value}`, payload)
+    } else {
+      await axios.post(`${API_BASE_URL}/growth_logs`, { account_id: currentAccount.value.account_id, ...payload })
+    }
+    cancelEditGrowth()
+    fetchGrowth()
+  } catch (err) {
+    alert('操作失败: ' + (err.response?.data?.detail || err.message))
+  }
+  loading.value = false
+}
+
+async function deleteGrowth(id) {
+  if (confirm('确定要删除这条记录吗？')) {
+    try {
+      await axios.delete(`${API_BASE_URL}/growth_logs/${id}`)
+      fetchGrowth()
+    } catch {
+      alert('删除失败')
+    }
+  }
+}
+
+// ==========================================
+// 🏆 模块三点五：里程碑记录
+// ==========================================
+const milestoneList = ref([])
+const milestoneTime = ref(getCurrentDateTime())
+const milestoneTitle = ref('')
+const milestoneNotes = ref('')
+const milestoneEditingId = ref(null)
+
+const groupedMilestones = computed(() => {
+  if (!milestoneList.value.length) return []
+  const groups = {}
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now.getTime() - 9 * 60 * 60 * 1000)
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const thresholdKey = thirtyDaysAgo.toLocaleDateString('sv-SE')
+
+  milestoneList.value.forEach((log) => {
+    const date = new Date(log.created_at)
+    const offsetDate = new Date(date.getTime() - 9 * 60 * 60 * 1000)
+    const dateKey = offsetDate.toLocaleDateString('sv-SE')
+    if (!groups[dateKey]) groups[dateKey] = []
+    groups[dateKey].push(log)
+  })
+
+  return Object.keys(groups)
+    .sort()
+    .reverse()
+    .map((dateKey) => {
+      const d = new Date(dateKey)
+      return {
+        dateKey,
+        displayDate: `${d.getMonth() + 1}月${d.getDate()}日`,
+        logs: groups[dateKey],
+        isOld: dateKey < thresholdKey,
+      }
+    })
+})
+
+async function fetchMilestones() {
+  if (!currentAccount.value) return
+  try {
+    const res = await axios.get(`${API_BASE_URL}/milestones/${currentAccount.value.account_id}`)
+    if (res.data && res.data.data) {
+      milestoneList.value = res.data.data
+    }
+  } catch (err) {
+    console.error('获取里程碑失败', err)
+  }
+}
+
+function selectForEditMilestone(log) {
+  milestoneEditingId.value = log.id
+  milestoneTitle.value = log.title
+  milestoneNotes.value = log.notes || ''
+  const date = new Date(log.created_at)
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  milestoneTime.value = date.toISOString().slice(0, 16)
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function cancelEditMilestone() {
+  milestoneEditingId.value = null
+  milestoneTitle.value = ''
+  milestoneNotes.value = ''
+  milestoneTime.value = getCurrentDateTime()
+}
+
+async function saveMilestone() {
+  if (!milestoneTitle.value.trim()) return alert('请填写里程碑内容')
+  const actionName = milestoneEditingId.value ? '修改' : '新增'
+  if (!window.confirm(`确认${actionName}里程碑？`)) return
+  loading.value = true
+  try {
+    const payload = {
+      title: milestoneTitle.value.trim(),
+      notes: milestoneNotes.value,
+      created_at: new Date(milestoneTime.value).toISOString(),
+    }
+    if (milestoneEditingId.value) {
+      await axios.put(`${API_BASE_URL}/milestones/${milestoneEditingId.value}`, payload)
+    } else {
+      await axios.post(`${API_BASE_URL}/milestones`, {
+        account_id: currentAccount.value.account_id,
+        ...payload,
+      })
+    }
+    cancelEditMilestone()
+    fetchMilestones()
+  } catch (err) {
+    alert('操作失败: ' + (err.response?.data?.detail || err.message))
+  }
+  loading.value = false
+}
+
+async function deleteMilestone(id) {
+  if (confirm('确定要删除这条记录吗？')) {
+    try {
+      await axios.delete(`${API_BASE_URL}/milestones/${id}`)
+      fetchMilestones()
+    } catch {
+      alert('删除失败')
+    }
+  }
+}
+
+const tabTitle = computed(() => ({
+  milk: '🍼 喝奶记录',
+  other: '🌟 日常记录',
+  growth: '📏 生长记录',
+  milestone: '🏆 里程碑记录',
+}[activeTab.value]) || '')
 
 const daysOld = computed(() => {
   // 如果没获取到账户信息，或者该账户(旧账户)没有填生日，默认显示 0
@@ -315,7 +630,10 @@ onMounted(() => {
     currentAccount.value = account
     session.value = true
     fetchLogs()
+    fetchFood()
     fetchActivities()
+    fetchGrowth()
+    fetchMilestones()
   }
 })
 </script>
@@ -330,7 +648,7 @@ onMounted(() => {
     <!-- 标题直接动态显示当前宝宝的昵称 -->
     <h1>{{ currentAccount?.display_name || '宝宝' }}健康成长 🍼👼🌿</h1>
     <h2>第 {{ daysOld }}天</h2>
-    <h2>{{ activeTab === 'milk' ? '🍼 喝奶记录' : '🌟 日常记录' }}</h2>
+    <h2>{{ tabTitle }}</h2>
   </div>
   <button @click="handleLogout" class="btn-logout">退出</button>
 </header>
@@ -359,7 +677,7 @@ onMounted(() => {
 
         <section class="card input-section" :class="{ 'editing-mode': editingId }">
           <div class="form-header">
-            <h3>{{ editingId ? '📝 修改记录' : '➕ 新增记录' }}</h3>
+            <h3>{{ editingId ? '📝 修改记录' : '🍼 奶粉' }}</h3>
             <button v-if="editingId" @click="cancelEdit" class="btn-text">取消</button>
           </div>
           <div class="form-row">
@@ -380,6 +698,29 @@ onMounted(() => {
           </button>
         </section>
 
+        <section class="card input-section" :class="{ 'editing-mode': foodEditingId }">
+          <div class="form-header">
+            <h3>{{ foodEditingId ? '📝 修改记录' : '🥣 辅食' }}</h3>
+            <button v-if="foodEditingId" @click="cancelEditFood" class="btn-text">取消</button>
+          </div>
+          <div class="form-row">
+            <div class="input-item">
+              <label>时间</label><input type="datetime-local" v-model="foodTime" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-item">
+              <label>辅食量(g)</label><input type="number" v-model="newFoodAmount" inputmode="numeric" />
+            </div>
+            <div class="input-item">
+              <label>备注</label><input type="text" v-model="newFoodNotes" placeholder="可选" />
+            </div>
+          </div>
+          <button @click="saveFood" :disabled="loading" class="btn-primary" style="background-color: #e67e22">
+            {{ loading ? '处理中...' : foodEditingId ? '保存修改' : '确认提交' }}
+          </button>
+        </section>
+
         <section class="history-section">
           <div v-for="group in groupedLogs" :key="group.dateKey" class="date-group">
             <div
@@ -393,31 +734,60 @@ onMounted(() => {
                   expandedDates.includes(group.dateKey) ? '🔼 收起' : '🔽 历史'
                 }}</small></span
               >
-              <span class="group-total">共 {{ group.total }}ml</span>
+              <span class="group-total">奶 {{ group.total }}ml · 辅食 {{ foodByDay[group.dateKey]?.total || 0 }}g</span>
             </div>
 
-            <div class="log-grid" v-if="!group.isOld || expandedDates.includes(group.dateKey)">
-              <div
-                v-for="log in group.logs"
-                :key="log.id"
-                class="log-cell"
-                @click="selectForEdit(log)"
-              >
-                <div class="log-cell-top">
-                  <span class="log-time"
-                    >⏰
-                    {{
-                      new Date(log.created_at).toLocaleTimeString('sv-SE', {
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
-                    }}</span
-                  ><button @click.stop="deleteLog(log.id)" class="btn-del">×</button>
+            <div class="day-split" v-if="!group.isOld || expandedDates.includes(group.dateKey)">
+              <div class="day-col">
+                <div class="col-header">🍼 奶</div>
+                <div
+                  v-for="log in group.logs"
+                  :key="log.id"
+                  class="log-cell"
+                  @click="selectForEdit(log)"
+                >
+                  <div class="log-cell-top">
+                    <span class="log-time"
+                      >⏰
+                      {{
+                        new Date(log.created_at).toLocaleTimeString('sv-SE', {
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      }}</span
+                    ><button @click.stop="deleteLog(log.id)" class="btn-del">×</button>
+                  </div>
+                  <div class="log-amount">{{ log.amount_ml }}<small>ml</small></div>
+                  <div v-if="log.notes" class="log-note">💬 {{ log.notes }}</div>
                 </div>
-                <div class="log-amount">{{ log.amount_ml }}<small>ml</small></div>
-                <div v-if="log.notes" class="log-note">💬 {{ log.notes }}</div>
+              </div>
+              <div class="day-col food-col">
+                <div class="col-header">🥣 辅食</div>
+                <div
+                  v-for="log in foodByDay[group.dateKey]?.logs || []"
+                  :key="log.id"
+                  class="log-cell food-cell"
+                  @click="selectForEditFood(log)"
+                >
+                  <div class="log-cell-top">
+                    <span class="log-time"
+                      >⏰
+                      {{
+                        new Date(log.created_at).toLocaleTimeString('sv-SE', {
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      }}</span
+                    ><button @click.stop="deleteFood(log.id)" class="btn-del">×</button>
+                  </div>
+                  <div class="log-amount">{{ log.amount_g }}<small>g</small></div>
+                  <div v-if="log.notes" class="log-note">💬 {{ log.notes }}</div>
+                </div>
+                <div v-if="!foodByDay[group.dateKey]?.logs?.length" class="empty-tip">暂无辅食</div>
               </div>
             </div>
           </div>
@@ -500,6 +870,153 @@ onMounted(() => {
           </div>
         </section>
       </div>
+
+      <div v-show="activeTab === 'growth'" class="tab-content">
+        <section class="card chart-section">
+          <GrowthChart v-if="growthList.length" :logs="growthList" />
+        </section>
+        <section class="card input-section" :class="{ 'editing-mode': growthEditingId }">
+          <div class="form-header">
+            <h3>{{ growthEditingId ? '📝 修改记录' : '➕ 新增记录' }}</h3>
+            <button v-if="growthEditingId" @click="cancelEditGrowth" class="btn-text">取消</button>
+          </div>
+          <div class="form-row">
+            <div class="input-item">
+              <label>时间</label><input type="datetime-local" v-model="growthTime" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-item">
+              <label>身高(cm)</label><input type="number" step="0.1" v-model="growthHeight" inputmode="decimal" />
+            </div>
+            <div class="input-item">
+              <label>体重(kg)</label><input type="number" step="0.1" v-model="growthWeight" inputmode="decimal" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-item">
+              <label>备注</label><input type="text" v-model="growthNotes" placeholder="可选" />
+            </div>
+          </div>
+          <button @click="saveGrowth" :disabled="loading" class="btn-primary" style="background-color: #8e44ad">
+            {{ loading ? '处理中...' : growthEditingId ? '保存修改' : '确认提交' }}
+          </button>
+        </section>
+
+        <section class="history-section">
+          <div v-for="group in groupedGrowth" :key="group.dateKey" class="date-group">
+            <div
+              class="group-header"
+              @click="group.isOld && toggleFold(group.dateKey, expandedGrowthDates)"
+              :class="{ clickable: group.isOld }"
+            >
+              <span class="group-date">
+                {{ group.displayDate }}
+                <small v-if="group.isOld" class="fold-tag tag-purple">
+                  {{ expandedGrowthDates.includes(group.dateKey) ? '🔼 收起' : '🔽 历史' }}
+                </small>
+              </span>
+              <span class="group-total">{{ group.logs.length }}项记录</span>
+            </div>
+            <div class="log-grid" v-if="!group.isOld || expandedGrowthDates.includes(group.dateKey)">
+              <div
+                v-for="log in group.logs"
+                :key="log.id"
+                class="log-cell growth-cell"
+                @click="selectForEditGrowth(log)"
+              >
+                <div class="log-cell-top">
+                  <span class="log-time"
+                    >⏰
+                    {{
+                      new Date(log.created_at).toLocaleTimeString('sv-SE', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    }}</span
+                  ><button @click.stop="deleteGrowth(log.id)" class="btn-del">×</button>
+                </div>
+                <div class="growth-values">
+                  <span v-if="log.height_cm != null" class="growth-value">📏 {{ log.height_cm }}<small>cm</small></span>
+                  <span v-if="log.weight_kg != null" class="growth-value">⚖️ {{ log.weight_kg }}<small>kg</small></span>
+                </div>
+                <div v-if="log.notes" class="log-note">💬 {{ log.notes }}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div v-show="activeTab === 'milestone'" class="tab-content">
+        <section class="card input-section" :class="{ 'editing-mode': milestoneEditingId }">
+          <div class="form-header">
+            <h3>{{ milestoneEditingId ? '📝 修改记录' : '➕ 新增记录' }}</h3>
+            <button v-if="milestoneEditingId" @click="cancelEditMilestone" class="btn-text">取消</button>
+          </div>
+          <div class="form-row">
+            <div class="input-item">
+              <label>时间</label><input type="datetime-local" v-model="milestoneTime" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-item">
+              <label>里程碑</label><input type="text" v-model="milestoneTitle" placeholder="如：第一次翻身" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-item">
+              <label>备注</label><input type="text" v-model="milestoneNotes" placeholder="可选" />
+            </div>
+          </div>
+          <button @click="saveMilestone" :disabled="loading" class="btn-primary" style="background-color: #d35400">
+            {{ loading ? '处理中...' : milestoneEditingId ? '保存修改' : '确认提交' }}
+          </button>
+        </section>
+
+        <section class="history-section">
+          <div v-for="group in groupedMilestones" :key="group.dateKey" class="date-group">
+            <div
+              class="group-header"
+              @click="group.isOld && toggleFold(group.dateKey, expandedMileDates)"
+              :class="{ clickable: group.isOld }"
+            >
+              <span class="group-date">
+                {{ group.displayDate }}
+                <small v-if="group.isOld" class="fold-tag tag-orange">
+                  {{ expandedMileDates.includes(group.dateKey) ? '🔼 收起' : '🔽 历史' }}
+                </small>
+              </span>
+              <span class="group-total">{{ group.logs.length }}项记录</span>
+            </div>
+            <div class="log-grid" v-if="!group.isOld || expandedMileDates.includes(group.dateKey)">
+              <div
+                v-for="log in group.logs"
+                :key="log.id"
+                class="log-cell mile-cell"
+                @click="selectForEditMilestone(log)"
+              >
+                <div class="log-cell-top">
+                  <span class="log-time"
+                    >⏰
+                    {{
+                      new Date(log.created_at).toLocaleTimeString('sv-SE', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    }}</span
+                  ><button @click.stop="deleteMilestone(log.id)" class="btn-del">×</button>
+                </div>
+                <div class="log-amount mile-title">🏆 {{ log.title }}</div>
+                <div v-if="log.notes" class="log-note">💬 {{ log.notes }}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
 
     <nav class="bottom-nav" v-if="session">
@@ -508,6 +1025,12 @@ onMounted(() => {
       </div>
       <div class="nav-item" :class="{ active: activeTab === 'other' }" @click="activeTab = 'other'">
         <span class="nav-icon">🌟</span><span class="nav-text">日常</span>
+      </div>
+      <div class="nav-item" :class="{ active: activeTab === 'growth' }" @click="activeTab = 'growth'">
+        <span class="nav-icon">📏</span><span class="nav-text">生长</span>
+      </div>
+      <div class="nav-item" :class="{ active: activeTab === 'milestone' }" @click="activeTab = 'milestone'">
+        <span class="nav-icon">🏆</span><span class="nav-text">里程碑</span>
       </div>
     </nav>
   </div>
@@ -677,6 +1200,14 @@ input[type='datetime-local'] {
   color: #3498db;
   background: #ebf5fb;
 }
+.tag-purple {
+  color: #8e44ad;
+  background: #f3e8ff;
+}
+.tag-orange {
+  color: #d35400;
+  background: #fdeede;
+}
 .group-total {
   color: #888;
   font-size: 0.85rem;
@@ -696,6 +1227,59 @@ input[type='datetime-local'] {
 }
 .act-cell {
   border-left-color: #3498db;
+}
+.food-cell {
+  border-left-color: #e67e22;
+}
+.day-split {
+  display: flex;
+  gap: 12px;
+}
+.day-col {
+  flex: 1;
+  min-width: 0;
+}
+.col-header {
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: #888;
+  margin-bottom: 10px;
+}
+.food-col {
+  border-left: 1px dashed #eee;
+  padding-left: 12px;
+}
+.empty-tip {
+  color: #ccc;
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 14px 0;
+  border: 1px dashed #eee;
+  border-radius: 12px;
+}
+.growth-cell {
+  border-left-color: #8e44ad;
+}
+.growth-values {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.growth-value {
+  font-size: 1.15rem;
+  font-weight: bold;
+  color: #8e44ad;
+}
+.growth-value small {
+  font-size: 0.8rem;
+  color: #999;
+  margin-left: 3px;
+}
+.mile-cell {
+  border-left-color: #d35400;
+}
+.mile-title {
+  color: #d35400;
 }
 .log-cell-top {
   display: flex;

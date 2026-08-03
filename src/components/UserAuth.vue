@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { api } from '../supabase'
+import { api } from '../api'
 
 const isLoginMode = ref(true) 
 const username = ref('')

@@ -8,7 +8,7 @@ export function getCurrentAccount() {
   return account ? JSON.parse(account) : null
 }
 
-export function setCurrrentAccount(accountData) {
+export function setCurrentAccount(accountData) {
   localStorage.setItem('currentAccount', JSON.stringify(accountData))
 }
 
@@ -22,7 +22,7 @@ export const api = {
     try {
       const response = await axios.post(`${API_BASE_URL}/login`, { login_name, password })
       if (response.data && response.data.account_id) {
-        setCurrrentAccount(response.data)
+        setCurrentAccount(response.data)
         return { data: response.data, error: null }
       }
       return { data: null, error: { message: '登录响应异常' } }
@@ -44,7 +44,7 @@ export const api = {
         birthday 
       })
       if (response.data && response.data.account_id) {
-        setCurrrentAccount(response.data)
+        setCurrentAccount(response.data)
         return { data: response.data, error: null }
       }
       return { data: null, error: { message: '注册响应异常' } }
