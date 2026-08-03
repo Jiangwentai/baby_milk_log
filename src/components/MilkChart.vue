@@ -26,9 +26,37 @@ const renderChart = () => {
     dailyData[dateString] = (dailyData[dateString] || 0) + log.amount_ml
   })
 
-  // 排序日期（取最近 7 天）
-  const sortedDates = Object.keys(dailyData).sort().slice(-7)
-  const chartValues = sortedDates.map((date) => dailyData[date])
+  // 排序日期（取最近 7 个自然日，空天补 0；数据不足 7 天则从最早记录开始）
+  const dayMs = 24 * 60 * 60 * 1000
+  const keys = Object.keys(dailyData)
+  let earliest = null
+  let latest = null
+  keys.forEach((k) => {
+    const t = new Date(`${k}T12:00:00`)
+    if (!earliest || t < earliest) earliest = t
+    if (!latest || t > latest) latest = t
+  })
+
+  const today = new Date(new Date().getTime() - 9 * 60 * 60 * 1000)
+  const todayNoon = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12)
+  const stale = latest.getTime() < todayNoon.getTime() - 7 * dayMs
+  const end = stale || latest > todayNoon ? latest : todayNoon
+
+  const spanDays = Math.round((end - earliest) / dayMs)
+  const from = new Date(end)
+  if (spanDays + 1 > 7) {
+    from.setDate(from.getDate() - 6)
+  } else {
+    from.setTime(earliest.getTime())
+  }
+
+  const lo = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 12)
+  const hi = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 12)
+  const sortedDates = []
+  for (let c = new Date(lo); c <= hi; c.setDate(c.getDate() + 1)) {
+    sortedDates.push(c.toLocaleDateString('sv-SE'))
+  }
+  const chartValues = sortedDates.map((date) => dailyData[date] || 0)
 
   // ECharts 配置项
   const option = {

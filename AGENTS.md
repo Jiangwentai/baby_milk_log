@@ -25,6 +25,11 @@
   `cd xixi_app_docker && .venv/bin/uvicorn main:app --port 8001`（或 `docker` 构建）。
 - Docker：`xixi_app_docker/Dockerfile` 用 `COPY . .` 把整个目录（含 dist）打进镜箱，
   监听 8001；后端兜底返回 `index.html` 交给前端路由。`dist/` 已被 .gitignore 忽略。
+- Docker Hub 发布（镜像名 `loooost/xixi-app`，先 `npm run build` 同步 dist）：
+  ```sh
+  cd xixi_app_docker && docker build -t loooost/xixi-app:latest . && docker push loooost/xixi-app:latest
+  ```
+  `xixi_app_docker/.dockerignore` 已排除 `xixi-app-v1.tar`/`__pycache__`/`.venv`，别删。
 
 ## 本地运行与测试
 
