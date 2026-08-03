@@ -12,8 +12,8 @@ const session = ref(null)
 const currentAccount = ref(null)
 const activeTab = ref('milk')
 const loading = ref(false)
-const expandedDates = ref([]) 
-const expandedActDates = ref([]) 
+const expandedDates = ref([])
+const expandedActDates = ref([])
 
 function getCurrentDateTime() {
   const now = new Date()
@@ -287,14 +287,14 @@ async function deleteActivity(id) {
 const daysOld = computed(() => {
   // 如果没获取到账户信息，或者该账户(旧账户)没有填生日，默认显示 0
   if (!currentAccount.value || !currentAccount.value.birthday) return 0
-  
+
   const birthDate = new Date(currentAccount.value.birthday)
   const today = new Date()
-  
+
   // 将时间都归零到午夜，避免因为时分秒导致的天数误差
   birthDate.setHours(0, 0, 0, 0)
   today.setHours(0, 0, 0, 0)
-  
+
   const diffTime = today - birthDate
   return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1 // 加 1 代表出生当天算第 1 天 (视你的习惯可去掉)
 })
@@ -328,7 +328,7 @@ onMounted(() => {
 <header class="header">
   <div class="title-group">
     <!-- 标题直接动态显示当前宝宝的昵称 -->
-    <h1>{{ currentAccount?.display_name || '宝宝' }} 的健康成长 🍼👼🌿</h1>
+    <h1>{{ currentAccount?.display_name || '宝宝' }}健康成长 🍼👼🌿</h1>
     <h2>第 {{ daysOld }}天</h2>
     <h2>{{ activeTab === 'milk' ? '🍼 喝奶记录' : '🌟 日常记录' }}</h2>
   </div>

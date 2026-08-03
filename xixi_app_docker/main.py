@@ -6,6 +6,7 @@ from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import Optional
+import os
 
 app = FastAPI()
 
@@ -242,4 +243,12 @@ app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
 # 捕获所有非 API 的路由，统统返回 Vue 的 index.html，交由前端路由接管
 @app.get("/{catchall:path}")
 def serve_vue_app(catchall: str):
+    # 1. 尝试去 dist 目录下寻找浏览器请求的真实文件 (比如 manifest.webmanifest 或 favicon.ico)
+    file_path = os.path.join("dist", catchall)
+    
+    # 2. 如果这个文件确实存在，就把它原本返回
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    
+    # 3. 如果文件不存在（说明是 Vue Router 的页面跳转逻辑），统统返回 index.html
     return FileResponse("dist/index.html")
